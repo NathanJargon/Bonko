@@ -9,6 +9,20 @@ A browser multiplayer social-chaos game with a React frontend and Socket.IO back
 - Crew wins by collecting shard points before timer ends
 - Shadow wins by tagging all Crew players
 - Host can reset back to lobby and restart rounds
+- Practice mode adds bots so you can play solo or warm up before a real match
+- Chaos mode runs a faster, denser version of the game
+
+## Match Modes
+
+- Classic: original rules, no bots
+- Practice: bots fill the room and the pace is a little faster
+- Chaos: higher pace, more shards, and more pressure
+
+## Lobby Settings
+
+- Host can switch modes before starting a round
+- Practice and Chaos support adjustable bot counts
+- Movement pace is now tuned to feel snappier in live play
 
 ## Tech
 

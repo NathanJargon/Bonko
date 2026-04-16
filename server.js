@@ -10,13 +10,58 @@ const WORLD_WIDTH = 2200;
 const WORLD_HEIGHT = 1400;
 const ROUND_TIME_MS = 3 * 60 * 1000;
 const TICK_MS = 50;
-const PLAYER_SPEED = 280;
+const PLAYER_SPEED = 380;
+const PLAYER_RADIUS = 20;
+const INTERACT_RADIUS = 42;
+const CHAT_LIMIT = 12;
 const TAG_DISTANCE = 52;
 const TAG_COOLDOWN_MS = 8000;
 const CREW_SCORE_TARGET = 28;
 const SHARD_VALUE = 1;
 const SHARD_COUNT = 32;
+const MODE_CONFIGS = {
+  classic: {
+    label: "Classic",
+    pace: 1,
+    botCount: 0,
+    roundTimeMs: ROUND_TIME_MS,
+    shardCount: SHARD_COUNT,
+  },
+  practice: {
+    label: "Practice",
+    pace: 1.08,
+    botCount: 4,
+    roundTimeMs: ROUND_TIME_MS,
+    shardCount: SHARD_COUNT,
+  },
+  chaos: {
+    label: "Chaos",
+    pace: 1.2,
+    botCount: 6,
+    roundTimeMs: 2.5 * 60 * 1000,
+    shardCount: 40,
+  },
+};
 const DEFAULT_ALLOWED_ORIGINS = ["http://localhost:5173", "http://127.0.0.1:5173"];
+
+function normalizeMode(value) {
+  const nextMode = String(value || "classic").toLowerCase();
+  return MODE_CONFIGS[nextMode] ? nextMode : "classic";
+}
+
+function getModeConfig(mode) {
+  return MODE_CONFIGS[normalizeMode(mode)];
+}
+
+function normalizeBotCount(value, mode) {
+  const fallback = getModeConfig(mode).botCount;
+  const nextCount = Number.parseInt(value, 10);
+  if (!Number.isFinite(nextCount)) {
+    return fallback;
+  }
+
+  return Math.max(0, Math.min(8, nextCount));
+}
 
 function parseAllowedOrigins(value) {
   const raw = String(value || "").trim();
@@ -92,11 +137,70 @@ function createShard(id) {
   };
 }
 
+function createWalls() {
+  return [
+    { id: "w1", x: 400, y: 250, w: 1220, h: 34 },
+    { id: "w2", x: 410, y: 1110, w: 1220, h: 34 },
+    { id: "w3", x: 510, y: 420, w: 34, h: 360 },
+    { id: "w4", x: 1656, y: 420, w: 34, h: 360 },
+    { id: "w5", x: 250, y: 720, w: 320, h: 34 },
+    { id: "w6", x: 1630, y: 720, w: 320, h: 34 },
+  ];
+}
+
+function createInteractables() {
+  return [
+    { id: "i1", kind: "boost", label: "Boost Pad", x: 470, y: 950, r: 26, cooldownMs: 12000, availableAt: 0 },
+    { id: "i2", kind: "boost", label: "Boost Pad", x: 1730, y: 460, r: 26, cooldownMs: 12000, availableAt: 0 },
+    { id: "i3", kind: "cache", label: "Supply Cache", x: 1050, y: 650, r: 28, cooldownMs: 15000, availableAt: 0 },
+    { id: "i4", kind: "cache", label: "Supply Cache", x: 340, y: 350, r: 28, cooldownMs: 15000, availableAt: 0 },
+  ];
+}
+
+function normalizeWalls(walls) {
+  return walls.map((wall) => ({
+    id: wall.id,
+    x: wall.x,
+    y: wall.y,
+    w: wall.w,
+    h: wall.h,
+  }));
+}
+
+function normalizeInteractables(interactables, now = Date.now()) {
+  return interactables.map((item) => ({
+    id: item.id,
+    kind: item.kind,
+    label: item.label,
+    x: item.x,
+    y: item.y,
+    r: item.r,
+    available: now >= item.availableAt,
+  }));
+}
+
+function createChatEntry(player, text) {
+  return {
+    id: `${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+    authorId: player.id,
+    author: player.name,
+    text,
+    ts: Date.now(),
+    bot: Boolean(player.bot),
+  };
+}
+
+function sanitizeChat(text) {
+  return String(text || "").replace(/[\r\n]+/g, " ").trim().slice(0, 120);
+}
+
 function makeRoom(code) {
   return {
     code,
     hostId: null,
     status: "lobby",
+    mode: "classic",
+    botCount: 0,
     players: new Map(),
     score: 0,
     winner: null,
@@ -104,13 +208,189 @@ function makeRoom(code) {
     endsAt: null,
     ticker: null,
     shards: [],
+    walls: createWalls(),
+    interactables: createInteractables(),
+    chat: [],
     reason: "",
   };
+}
+
+function resolveWallCollision(player, walls) {
+  for (const wall of walls) {
+    const left = wall.x - PLAYER_RADIUS;
+    const right = wall.x + wall.w + PLAYER_RADIUS;
+    const top = wall.y - PLAYER_RADIUS;
+    const bottom = wall.y + wall.h + PLAYER_RADIUS;
+
+    if (player.x < left || player.x > right || player.y < top || player.y > bottom) {
+      continue;
+    }
+
+    const overlapLeft = player.x - left;
+    const overlapRight = right - player.x;
+    const overlapTop = player.y - top;
+    const overlapBottom = bottom - player.y;
+    const minOverlap = Math.min(overlapLeft, overlapRight, overlapTop, overlapBottom);
+
+    if (minOverlap === overlapLeft) {
+      player.x = left;
+    } else if (minOverlap === overlapRight) {
+      player.x = right;
+    } else if (minOverlap === overlapTop) {
+      player.y = top;
+    } else {
+      player.y = bottom;
+    }
+  }
+}
+
+function getNearestInteractable(room, player) {
+  let nearest = null;
+
+  for (const item of room.interactables) {
+    if (Date.now() < item.availableAt) {
+      continue;
+    }
+
+    const dx = player.x - item.x;
+    const dy = player.y - item.y;
+    const distance = Math.hypot(dx, dy);
+    if (distance > INTERACT_RADIUS + item.r) {
+      continue;
+    }
+
+    if (!nearest || distance < nearest.distance) {
+      nearest = { item, distance };
+    }
+  }
+
+  return nearest?.item ?? null;
+}
+
+function applyInteractableEffect(room, player, item, now = Date.now()) {
+  item.availableAt = now + item.cooldownMs;
+
+  if (item.kind === "boost") {
+    player.speedBoostUntil = now + 5000;
+    return `${player.name} hit a boost pad.`;
+  }
+
+  if (item.kind === "cache") {
+    if (player.role === "crew") {
+      room.score += 2;
+    }
+
+    player.speedBoostUntil = now + 2500;
+    return `${player.name} looted a supply cache.`;
+  }
+
+  return `${player.name} interacted.`;
 }
 
 function sanitizeName(name) {
   const cleaned = String(name || "Pilot").replace(/[^a-zA-Z0-9 _-]/g, "").trim();
   return cleaned.slice(0, 16) || "Pilot";
+}
+
+function isBotPlayer(player) {
+  return Boolean(player?.bot);
+}
+
+function createBot(room, index) {
+  return {
+    id: `bot-${room.code}-${index}-${randomId(3)}`,
+    name: `Bot ${index + 1}`,
+    ...randomSpawn(),
+    vx: 0,
+    vy: 0,
+    role: "crew",
+    alive: true,
+    cooldownUntil: 0,
+    speedBoostUntil: 0,
+    bot: true,
+  };
+}
+
+function desiredBotCount(room) {
+  if (room.mode === "classic") {
+    return 0;
+  }
+
+  const config = getModeConfig(room.mode);
+  return room.botCount > 0 ? room.botCount : config.botCount;
+}
+
+function syncBots(room) {
+  const targetCount = desiredBotCount(room);
+  const bots = [...room.players.values()].filter(isBotPlayer);
+
+  while (bots.length < targetCount) {
+    const bot = createBot(room, bots.length);
+    room.players.set(bot.id, bot);
+    bots.push(bot);
+  }
+
+  while (bots.length > targetCount) {
+    const bot = bots.pop();
+    room.players.delete(bot.id);
+  }
+}
+
+function getHumanPlayers(room) {
+  return [...room.players.values()].filter((player) => !isBotPlayer(player));
+}
+
+function pickShadowPlayer(room, players) {
+  const humanPlayers = players.filter((player) => !isBotPlayer(player));
+  const candidates = room.mode === "classic" || humanPlayers.length === 0 ? players : humanPlayers;
+  return candidates[Math.floor(Math.random() * candidates.length)];
+}
+
+function steerToward(source, targetX, targetY, speedMultiplier = 1) {
+  const dx = targetX - source.x;
+  const dy = targetY - source.y;
+  const distance = Math.hypot(dx, dy) || 1;
+  source.vx = (dx / distance) * speedMultiplier;
+  source.vy = (dy / distance) * speedMultiplier;
+}
+
+function updateBotBrain(room, bot) {
+  const modeConfig = getModeConfig(room.mode);
+  const botSpeed = modeConfig.pace * 0.9;
+
+  if (!bot.alive) {
+    bot.vx = 0;
+    bot.vy = 0;
+    return;
+  }
+
+  if (room.status !== "active") {
+    bot.vx = 0;
+    bot.vy = 0;
+    return;
+  }
+
+  const nearestShard = room.shards.reduce(
+    (best, shard) => {
+      const dx = shard.x - bot.x;
+      const dy = shard.y - bot.y;
+      const distance = dx * dx + dy * dy;
+      if (best === null || distance < best.distance) {
+        return { distance, shard };
+      }
+      return best;
+    },
+    null,
+  );
+
+  if (nearestShard) {
+    steerToward(bot, nearestShard.shard.x, nearestShard.shard.y, botSpeed);
+    return;
+  }
+
+  const wanderAngle = ((Date.now() / 500) + bot.x + bot.y) % (Math.PI * 2);
+  bot.vx = Math.cos(wanderAngle) * botSpeed;
+  bot.vy = Math.sin(wanderAngle) * botSpeed;
 }
 
 function roomSnapshot(room, requesterId) {
@@ -125,6 +405,8 @@ function roomSnapshot(room, requesterId) {
       isHost: p.id === room.hostId,
       isShadow: p.role === "shadow",
       cooldownUntil: p.cooldownUntil,
+      speedBoostUntil: p.speedBoostUntil,
+      bot: isBotPlayer(p),
     };
 
     if (!base.roleKnown && p.role === "shadow") {
@@ -137,6 +419,10 @@ function roomSnapshot(room, requesterId) {
   return {
     title: "Bonko",
     room: room.code,
+    mode: room.mode,
+    modeLabel: getModeConfig(room.mode).label,
+    pace: getModeConfig(room.mode).pace,
+    botCount: desiredBotCount(room),
     minRecommended: ROOM_SIZE_MIN,
     maxAllowed: ROOM_SIZE_MAX,
     scoreTarget: CREW_SCORE_TARGET,
@@ -149,6 +435,9 @@ function roomSnapshot(room, requesterId) {
     now: Date.now(),
     world: { width: WORLD_WIDTH, height: WORLD_HEIGHT },
     shards: room.shards,
+    walls: normalizeWalls(room.walls),
+    interactables: normalizeInteractables(room.interactables),
+    chat: room.chat,
     players,
   };
 }
@@ -178,6 +467,9 @@ function resetLobby(room) {
   room.startedAt = null;
   room.endsAt = null;
   room.shards = [];
+  room.interactables = createInteractables();
+  room.chat = room.chat.slice(-CHAT_LIMIT);
+  syncBots(room);
 
   for (const player of room.players.values()) {
     const spawn = randomSpawn();
@@ -188,6 +480,7 @@ function resetLobby(room) {
     player.alive = true;
     player.role = "crew";
     player.cooldownUntil = 0;
+    player.speedBoostUntil = 0;
   }
 
   broadcastRoom(room);
@@ -198,24 +491,33 @@ function startRound(room) {
     return;
   }
 
-  const players = [...room.players.values()];
-  if (players.length < 3) {
+  syncBots(room);
+
+  const humanCount = getHumanPlayers(room).length;
+  if (room.mode === "classic" && humanCount < 3) {
     return;
   }
 
+  if (room.mode !== "classic" && humanCount < 1) {
+    return;
+  }
+
+  const modeConfig = getModeConfig(room.mode);
+  const players = [...room.players.values()];
   room.status = "active";
   room.score = 0;
   room.winner = null;
   room.reason = "";
   room.startedAt = Date.now();
-  room.endsAt = room.startedAt + ROUND_TIME_MS;
-  room.shards = Array.from({ length: SHARD_COUNT }, (_, i) => createShard(`s${i}`));
+  room.endsAt = room.startedAt + modeConfig.roundTimeMs;
+  room.shards = Array.from({ length: modeConfig.shardCount }, (_, i) => createShard(`s${i}`));
 
-  const shadowIndex = Math.floor(Math.random() * players.length);
+  const shadowPlayer = pickShadowPlayer(room, players);
   players.forEach((player, i) => {
-    player.role = i === shadowIndex ? "shadow" : "crew";
+    player.role = player === shadowPlayer ? "shadow" : "crew";
     player.alive = true;
     player.cooldownUntil = 0;
+    player.speedBoostUntil = 0;
     const spawn = randomSpawn();
     player.x = spawn.x;
     player.y = spawn.y;
@@ -234,14 +536,23 @@ function startRound(room) {
 
     const now = Date.now();
     const delta = TICK_MS / 1000;
+    const speed = PLAYER_SPEED * getModeConfig(room.mode).pace;
+
+    for (const bot of room.players.values()) {
+      if (isBotPlayer(bot)) {
+        updateBotBrain(room, bot);
+      }
+    }
 
     for (const player of room.players.values()) {
       if (!player.alive) {
         continue;
       }
 
-      player.x += player.vx * PLAYER_SPEED * delta;
-      player.y += player.vy * PLAYER_SPEED * delta;
+      const boostMultiplier = player.speedBoostUntil && player.speedBoostUntil > now ? 1.35 : 1;
+      player.x += player.vx * speed * boostMultiplier * delta;
+      player.y += player.vy * speed * boostMultiplier * delta;
+      resolveWallCollision(player, room.walls);
       player.x = Math.max(20, Math.min(WORLD_WIDTH - 20, player.x));
       player.y = Math.max(20, Math.min(WORLD_HEIGHT - 20, player.y));
 
@@ -260,8 +571,8 @@ function startRound(room) {
       }
     }
 
-    if (room.shards.length < SHARD_COUNT) {
-      while (room.shards.length < SHARD_COUNT) {
+    if (room.shards.length < modeConfig.shardCount) {
+      while (room.shards.length < modeConfig.shardCount) {
         room.shards.push(createShard(`s${Date.now()}${Math.floor(Math.random() * 999)}`));
       }
     }
@@ -297,7 +608,7 @@ function removePlayer(socketId) {
     const wasHost = room.hostId === socketId;
     room.players.delete(socketId);
 
-    if (room.players.size === 0) {
+    if (room.players.size === 0 || getHumanPlayers(room).length === 0) {
       if (room.ticker) {
         clearInterval(room.ticker);
       }
@@ -306,7 +617,8 @@ function removePlayer(socketId) {
     }
 
     if (wasHost) {
-      room.hostId = [...room.players.keys()][0];
+      const nextHost = getHumanPlayers(room)[0] || [...room.players.values()][0];
+      room.hostId = nextHost?.id || null;
     }
 
     if (room.status === "active") {
@@ -329,7 +641,7 @@ function removePlayer(socketId) {
 }
 
 io.on("connection", (socket) => {
-  socket.on("room:create", ({ name }) => {
+  socket.on("room:create", ({ name, mode, botCount }) => {
     const code = randomId();
     const room = makeRoom(code);
     rooms.set(code, room);
@@ -345,7 +657,12 @@ io.on("connection", (socket) => {
       role: "crew",
       alive: true,
       cooldownUntil: 0,
+      speedBoostUntil: 0,
     });
+
+    room.mode = normalizeMode(mode);
+    room.botCount = room.mode === "classic" ? 0 : normalizeBotCount(botCount, room.mode);
+    syncBots(room);
 
     socket.join(code);
     socket.emit("room:joined", { room: code, isHost: true });
@@ -374,10 +691,23 @@ io.on("connection", (socket) => {
       role: "crew",
       alive: true,
       cooldownUntil: 0,
+      speedBoostUntil: 0,
     });
 
     socket.join(room.code);
     socket.emit("room:joined", { room: room.code, isHost: false });
+    broadcastRoom(room);
+  });
+
+  socket.on("room:settings", ({ roomCode, mode, botCount }) => {
+    const room = rooms.get(String(roomCode || "").toUpperCase());
+    if (!room || room.hostId !== socket.id || room.status !== "lobby") {
+      return;
+    }
+
+    room.mode = normalizeMode(mode);
+    room.botCount = room.mode === "classic" ? 0 : normalizeBotCount(botCount, room.mode);
+    syncBots(room);
     broadcastRoom(room);
   });
 
@@ -423,6 +753,51 @@ io.on("connection", (socket) => {
 
     player.vx = nextVx;
     player.vy = nextVy;
+  });
+
+  socket.on("player:interact", ({ roomCode }) => {
+    const room = rooms.get(String(roomCode || "").toUpperCase());
+    if (!room || room.status === "lobby") {
+      return;
+    }
+
+    const player = room.players.get(socket.id);
+    if (!player || !player.alive) {
+      return;
+    }
+
+    const item = getNearestInteractable(room, player);
+    if (!item) {
+      socket.emit("error:message", "Nothing to interact with.");
+      return;
+    }
+
+    const now = Date.now();
+    const message = applyInteractableEffect(room, player, item, now);
+    room.chat.push(createChatEntry({ id: "system", name: "System" }, message));
+    room.chat = room.chat.slice(-CHAT_LIMIT);
+    broadcastRoom(room);
+  });
+
+  socket.on("chat:send", ({ roomCode, text }) => {
+    const room = rooms.get(String(roomCode || "").toUpperCase());
+    if (!room) {
+      return;
+    }
+
+    const player = room.players.get(socket.id);
+    if (!player) {
+      return;
+    }
+
+    const cleaned = sanitizeChat(text);
+    if (!cleaned) {
+      return;
+    }
+
+    room.chat.push(createChatEntry(player, cleaned));
+    room.chat = room.chat.slice(-CHAT_LIMIT);
+    broadcastRoom(room);
   });
 
   socket.on("player:tag", ({ roomCode }) => {
