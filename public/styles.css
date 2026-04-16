@@ -1,0 +1,209 @@
+:root {
+  --bg0: #0a0c12;
+  --bg1: #111726;
+  --ink: #f6f6f9;
+  --muted: #b6b7c4;
+  --accent: #4de2b1;
+  --accent-2: #ff8b5f;
+  --danger: #ff5f89;
+  --panel: rgba(11, 18, 31, 0.78);
+  --line: rgba(255, 255, 255, 0.14);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  min-height: 100%;
+}
+
+body {
+  font-family: "Space Grotesk", sans-serif;
+  color: var(--ink);
+  background: radial-gradient(circle at 12% 20%, #1f2b56 0, transparent 42%),
+    radial-gradient(circle at 86% 10%, #26442b 0, transparent 36%),
+    linear-gradient(130deg, var(--bg0), var(--bg1));
+  overflow-x: hidden;
+}
+
+.bg-grid {
+  position: fixed;
+  inset: 0;
+  background-image: linear-gradient(to right, rgba(255, 255, 255, 0.03) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+  background-size: 44px 44px;
+  pointer-events: none;
+}
+
+.app {
+  width: min(1100px, 94vw);
+  margin: 2rem auto;
+  display: grid;
+  gap: 1rem;
+}
+
+.panel {
+  border: 1px solid var(--line);
+  background: var(--panel);
+  backdrop-filter: blur(6px);
+  border-radius: 16px;
+  padding: 1.2rem;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.4);
+}
+
+.panel h1,
+.panel h2 {
+  font-family: "Bungee", sans-serif;
+  letter-spacing: 0.04em;
+  margin: 0 0 0.5rem;
+}
+
+.panel h1 {
+  font-size: clamp(1.8rem, 4vw, 2.9rem);
+}
+
+.tagline {
+  color: var(--muted);
+  margin-top: 0;
+}
+
+.input-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.8rem;
+  margin: 1rem 0;
+}
+
+label {
+  display: grid;
+  gap: 0.35rem;
+  font-size: 0.95rem;
+  color: var(--muted);
+}
+
+input {
+  border: 1px solid var(--line);
+  background: rgba(4, 8, 14, 0.85);
+  color: var(--ink);
+  border-radius: 10px;
+  padding: 0.62rem 0.72rem;
+  font-size: 1rem;
+}
+
+.actions {
+  display: flex;
+  gap: 0.65rem;
+  flex-wrap: wrap;
+}
+
+button {
+  border: 0;
+  border-radius: 999px;
+  padding: 0.7rem 1.05rem;
+  font-weight: 700;
+  font-family: "Space Grotesk", sans-serif;
+  cursor: pointer;
+  background: linear-gradient(125deg, var(--accent), #88ffd9);
+  color: #072114;
+}
+
+button.secondary {
+  background: linear-gradient(125deg, var(--accent-2), #ffd8a2);
+  color: #2e150d;
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.error {
+  min-height: 1.2rem;
+  color: var(--danger);
+  margin: 0.8rem 0 0;
+}
+
+.hud {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.pill {
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 0.5rem 0.9rem;
+  background: rgba(13, 15, 24, 0.85);
+  display: flex;
+  justify-content: space-between;
+}
+
+.pill span {
+  color: var(--muted);
+}
+
+.floating {
+  max-width: 430px;
+}
+
+#playersList {
+  list-style: none;
+  margin: 0.4rem 0 1rem;
+  padding: 0;
+  display: grid;
+  gap: 0.35rem;
+}
+
+#playersList li {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 0.5rem 0.7rem;
+  background: rgba(15, 25, 39, 0.8);
+}
+
+.game-wrap {
+  border-radius: 16px;
+  border: 1px solid var(--line);
+  background: rgba(6, 12, 20, 0.84);
+  padding: 0.8rem;
+}
+
+#gameCanvas {
+  width: 100%;
+  height: auto;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: radial-gradient(circle at 20% 10%, #1a2a55 0, #0a1424 48%, #080b13 100%);
+}
+
+.hint {
+  margin-top: 0.5rem;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.show {
+  display: block;
+}
+
+.hidden {
+  display: none;
+}
+
+@media (max-width: 860px) {
+  .input-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .hud {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .app {
+    margin: 1rem auto 2rem;
+  }
+}

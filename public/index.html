@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Orb Heist</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Bungee:wght@400&family=Space+Grotesk:wght@400;500;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="bg-grid"></div>
+    <main class="app">
+      <section id="menu" class="panel show">
+        <h1>Orb Heist</h1>
+        <p class="tagline">A social chaos arena for 5-10 players</p>
+        <div class="input-grid">
+          <label>
+            Pilot Name
+            <input id="nameInput" maxlength="16" placeholder="NeonFox" />
+          </label>
+          <label>
+            Room Code
+            <input id="roomInput" maxlength="6" placeholder="ABCD" />
+          </label>
+        </div>
+        <div class="actions">
+          <button id="createBtn">Create Room</button>
+          <button id="joinBtn" class="secondary">Join Room</button>
+        </div>
+        <p id="menuError" class="error"></p>
+      </section>
+
+      <section id="hud" class="hud hidden">
+        <div class="pill"><span>Room</span><strong id="roomCode">----</strong></div>
+        <div class="pill"><span>Players</span><strong id="playerCount">0</strong></div>
+        <div class="pill"><span>Score</span><strong id="score">0</strong></div>
+        <div class="pill"><span>Time</span><strong id="timer">180</strong></div>
+      </section>
+
+      <section id="lobbyPanel" class="panel hidden floating">
+        <h2>Lobby</h2>
+        <p>Host starts the round. Recommended 5-10 players.</p>
+        <ul id="playersList"></ul>
+        <div class="actions">
+          <button id="startBtn">Start Round</button>
+        </div>
+      </section>
+
+      <section id="statusPanel" class="panel hidden floating">
+        <h2 id="statusTitle">Round Status</h2>
+        <p id="statusText"></p>
+        <div class="actions">
+          <button id="resetBtn">Back To Lobby</button>
+        </div>
+      </section>
+
+      <section id="gameWrap" class="game-wrap hidden">
+        <canvas id="gameCanvas" width="960" height="600"></canvas>
+        <div class="hint">Move: WASD or Arrows | Action: Space (shadow tag)</div>
+      </section>
+    </main>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="client.js"></script>
+  </body>
+</html>
