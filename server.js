@@ -16,13 +16,34 @@ const TAG_COOLDOWN_MS = 8000;
 const CREW_SCORE_TARGET = 28;
 const SHARD_VALUE = 1;
 const SHARD_COUNT = 32;
-const VITE_ORIGINS = ["http://localhost:5173", "http://127.0.0.1:5173"];
+const DEFAULT_ALLOWED_ORIGINS = ["http://localhost:5173", "http://127.0.0.1:5173"];
+
+function parseAllowedOrigins(value) {
+  const raw = String(value || "").trim();
+  if (!raw) {
+    return DEFAULT_ALLOWED_ORIGINS;
+  }
+
+  return raw
+    .split(",")
+    .map((origin) => origin.trim())
+    .filter(Boolean);
+}
+
+const ALLOWED_ORIGINS = parseAllowedOrigins(process.env.CORS_ORIGIN);
 
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server, {
   cors: {
-    origin: VITE_ORIGINS,
+    origin: (origin, callback) => {
+      if (!origin || ALLOWED_ORIGINS.includes("*") || ALLOWED_ORIGINS.includes(origin)) {
+        callback(null, true);
+        return;
+      }
+
+      callback(new Error("Socket.IO CORS blocked this origin."));
+    },
     credentials: true,
   },
 });

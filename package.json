@@ -8,6 +8,7 @@
     "dev": "concurrently \"npm:dev:server\" \"npm:dev:client\"",
     "dev:server": "node server.js",
     "dev:client": "vite --config client/vite.config.js",
+    "build": "npm run build:client",
     "build:client": "vite build --config client/vite.config.js"
   },
   "keywords": [
