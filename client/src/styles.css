@@ -151,11 +151,25 @@ input {
   letter-spacing: 0.04em;
 }
 
+.page.is-playing .site-logo {
+  width: clamp(30px, 3.6vw, 42px);
+  height: clamp(30px, 3.6vw, 42px);
+  margin-bottom: 4px;
+}
+
 .masthead {
   display: grid;
   place-items: center;
   text-align: center;
   padding: 6px 2px 4px;
+}
+
+.site-logo {
+  width: clamp(42px, 7vw, 64px);
+  height: clamp(42px, 7vw, 64px);
+  object-fit: contain;
+  filter: drop-shadow(0 8px 20px rgba(0, 0, 0, 0.35));
+  margin-bottom: 6px;
 }
 
 .eyebrow {
@@ -238,8 +252,9 @@ input {
 
 .landing-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1.2fr) minmax(310px, 0.8fr);
+  grid-template-columns: minmax(0, 980px);
   gap: 16px;
+  justify-content: center;
   align-items: start;
 }
 
@@ -252,13 +267,13 @@ input {
 
 .mode-grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px;
   margin-bottom: 16px;
 }
 
 .mode-grid.compact {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   margin-bottom: 14px;
 }
 

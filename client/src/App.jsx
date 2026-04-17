@@ -10,12 +10,14 @@ const socket = io(SOCKET_URL, {
 
 const CANVAS_WIDTH = 980;
 const CANVAS_HEIGHT = 620;
+const LOGO_URL = "/logo.png";
 
 const MODE_PRESETS = {
   classic: {
     label: "Classic",
     description: "The original crew-vs-shadow match.",
     botCount: 0,
+    noteCount: 8,
     paceLabel: "1.00x pace",
     tone: "balanced",
   },
@@ -23,15 +25,9 @@ const MODE_PRESETS = {
     label: "Practice",
     description: "Bots fill the room so you can drill movement, notes, and tagging.",
     botCount: 4,
+    noteCount: 8,
     paceLabel: "1.08x pace",
     tone: "training",
-  },
-  chaos: {
-    label: "Chaos",
-    description: "Faster rounds, more notes, and more pressure.",
-    botCount: 6,
-    paceLabel: "1.20x pace",
-    tone: "wild",
   },
 };
 
@@ -54,7 +50,8 @@ function formatSeconds(value) {
 function applyModeDefaults(mode) {
   const nextMode = MODE_PRESETS[mode] ? mode : "classic";
   const nextBotCount = MODE_PRESETS[nextMode].botCount;
-  return { mode: nextMode, botCount: nextBotCount };
+  const nextNoteCount = MODE_PRESETS[nextMode].noteCount;
+  return { mode: nextMode, botCount: nextBotCount, noteCount: nextNoteCount };
 }
 
 function ModeCard({ mode, preset, selected, onSelect }) {
@@ -92,6 +89,7 @@ export default function App() {
   const [showMenus, setShowMenus] = useState(true);
   const [draftMode, setDraftMode] = useState("practice");
   const [draftBotCount, setDraftBotCount] = useState(MODE_PRESETS.practice.botCount);
+  const [draftNoteCount, setDraftNoteCount] = useState(MODE_PRESETS.practice.noteCount);
 
   const canvasRef = useRef(null);
   const keysRef = useRef({ up: false, down: false, left: false, right: false });
@@ -111,6 +109,7 @@ export default function App() {
   const currentMode = snapshot?.mode ?? draftMode;
   const currentPreset = MODE_PRESETS[currentMode] ?? MODE_PRESETS.classic;
   const currentBotCount = snapshot?.botCount ?? draftBotCount;
+  const currentNoteCount = snapshot?.noteCount ?? draftNoteCount;
   const modeTone = currentPreset.tone;
   const chatMessages = snapshot?.chat ?? [];
   const isPlaying = joined && snapshot?.status === "active";
@@ -206,6 +205,7 @@ export default function App() {
     const nextMode = snapshot.mode && MODE_PRESETS[snapshot.mode] ? snapshot.mode : "classic";
     setDraftMode(nextMode);
     setDraftBotCount(snapshot.botCount ?? MODE_PRESETS[nextMode].botCount);
+    setDraftNoteCount(snapshot.noteCount ?? MODE_PRESETS[nextMode].noteCount);
   }, [snapshot]);
 
   useEffect(() => {
@@ -322,8 +322,9 @@ export default function App() {
       const magnitude = Math.hypot(rawX, rawY);
       const targetVx = magnitude > 0 ? rawX / magnitude : 0;
       const targetVy = magnitude > 0 ? rawY / magnitude : 0;
-      const vx = moveRef.current.vx + (targetVx - moveRef.current.vx) * 0.3;
-      const vy = moveRef.current.vy + (targetVy - moveRef.current.vy) * 0.3;
+      const easing = magnitude === 0 ? 1 : 0.55;
+      const vx = moveRef.current.vx + (targetVx - moveRef.current.vx) * easing;
+      const vy = moveRef.current.vy + (targetVy - moveRef.current.vy) * easing;
 
       if (Math.abs(vx - moveRef.current.vx) < 0.01 && Math.abs(vy - moveRef.current.vy) < 0.01) {
         return;
@@ -461,6 +462,8 @@ export default function App() {
         const draw = tracked.get(player.id) || player;
         if (!player.alive) {
           ctx.fillStyle = "#4b5563";
+        } else if ((player.stunnedUntil ?? 0) > (snapshot.now ?? Date.now())) {
+          ctx.fillStyle = "#f97316";
         } else if (player.id === me.id) {
           ctx.fillStyle = "#fbbf24";
         } else if (player.bot) {
@@ -485,6 +488,12 @@ export default function App() {
         ctx.font = "600 12px Outfit";
         ctx.textAlign = "center";
         ctx.fillText(player.name, draw.x, draw.y - 28);
+
+        if ((player.stunnedUntil ?? 0) > (snapshot.now ?? Date.now())) {
+          ctx.fillStyle = "#fdba74";
+          ctx.font = "700 10px Outfit";
+          ctx.fillText("STUNNED", draw.x, draw.y + 34);
+        }
       });
 
       ctx.restore();
@@ -507,12 +516,14 @@ export default function App() {
     const next = applyModeDefaults(nextMode);
     setDraftMode(next.mode);
     setDraftBotCount(next.botCount);
+    setDraftNoteCount(next.noteCount);
 
     if (canEditLobby) {
       socket.emit("room:settings", {
         roomCode,
         mode: next.mode,
         botCount: next.botCount,
+        noteCount: next.noteCount,
       });
     }
   }
@@ -530,6 +541,21 @@ export default function App() {
         roomCode,
         mode: draftMode,
         botCount: nextBotCount,
+        noteCount: draftNoteCount,
+      });
+    }
+  }
+
+  function changeNoteCount(delta) {
+    const nextNoteCount = clamp(draftNoteCount + delta, 4, 16);
+    setDraftNoteCount(nextNoteCount);
+
+    if (canEditLobby) {
+      socket.emit("room:settings", {
+        roomCode,
+        mode: draftMode,
+        botCount: draftBotCount,
+        noteCount: nextNoteCount,
       });
     }
   }
@@ -549,6 +575,7 @@ export default function App() {
         name: safeName,
         mode: draftMode,
         botCount: draftMode === "classic" ? 0 : draftBotCount,
+        noteCount: draftNoteCount,
       });
       return;
     }
@@ -627,6 +654,7 @@ export default function App() {
     ? Math.max(0, Math.ceil((snapshot.endsAt - (snapshot.now ?? Date.now())) / 1000))
     : 180;
   const cooldown = me ? Math.max(0, Math.ceil(((me.cooldownUntil ?? 0) - (snapshot?.now ?? Date.now())) / 1000)) : 0;
+  const stunRemaining = me ? Math.max(0, Math.ceil(((me.stunnedUntil ?? 0) - (snapshot?.now ?? Date.now())) / 1000)) : 0;
   const roomScore = snapshot?.score ?? 0;
 
   return (
@@ -635,6 +663,7 @@ export default function App() {
       <div className="ambient ambient-b" />
       <main className={`game-shell ${isPlaying ? "is-playing" : ""}`}>
         <header className="masthead">
+          <img className="site-logo" src={LOGO_URL} alt="Bonko logo" />
           <h1>Bonko</h1>
         </header>
 
@@ -712,6 +741,22 @@ export default function App() {
 
                 <div className="setting-row">
                   <div>
+                    <strong>Note count</strong>
+                    <p>Set how many notes are active in this match.</p>
+                  </div>
+                  <div className="stepper">
+                    <button type="button" onClick={() => changeNoteCount(-1)}>
+                      -
+                    </button>
+                    <span>{draftNoteCount}</span>
+                    <button type="button" onClick={() => changeNoteCount(1)}>
+                      +
+                    </button>
+                  </div>
+                </div>
+
+                <div className="setting-row">
+                  <div>
                     <strong>Movement pace</strong>
                     <p>{currentPreset.paceLabel}</p>
                   </div>
@@ -779,6 +824,10 @@ export default function App() {
                     <strong>{snapshot.botCount}</strong>
                   </div>
                   <div>
+                    <span>Notes</span>
+                    <strong>{currentNoteCount}</strong>
+                  </div>
+                  <div>
                     <span>Players</span>
                     <strong>{players.length}</strong>
                   </div>
@@ -826,6 +875,22 @@ export default function App() {
                     </div>
                   </div>
 
+                  <div className="setting-row inline">
+                    <div>
+                      <strong>Note count</strong>
+                      <p>How many hidden notes are active.</p>
+                    </div>
+                    <div className="stepper">
+                      <button type="button" onClick={() => changeNoteCount(-1)} disabled={!canEditLobby}>
+                        -
+                      </button>
+                      <span>{draftNoteCount}</span>
+                      <button type="button" onClick={() => changeNoteCount(1)} disabled={!canEditLobby}>
+                        +
+                      </button>
+                    </div>
+                  </div>
+
                   <button onClick={startRound} disabled={!isHost || (draftMode === "classic" && players.length < 3)}>
                     Start Round
                   </button>
@@ -839,7 +904,9 @@ export default function App() {
                     <h3>{me?.isShadow ? "You are Shadow" : "You are Crew"}</h3>
                   </div>
                   <p className="muted">
-                    {me?.isShadow
+                    {stunRemaining > 0
+                      ? `Stunned (${stunRemaining}s)`
+                      : me?.isShadow
                       ? cooldown > 0
                           ? `Tag cooldown: ${cooldown}s`
                           : "Press Space to tag nearby crew. Q marks a target, Shift dashes."

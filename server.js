@@ -39,13 +39,6 @@ const MODE_CONFIGS = {
     roundTimeMs: ROUND_TIME_MS,
     taskCount: 8,
   },
-  chaos: {
-    label: "Chaos",
-    pace: 1.12,
-    botCount: 6,
-    roundTimeMs: 2.5 * 60 * 1000,
-    taskCount: 10,
-  },
 };
 const DEFAULT_ALLOWED_ORIGINS = ["http://localhost:5173", "http://127.0.0.1:5173"];
 
@@ -66,6 +59,16 @@ function normalizeBotCount(value, mode) {
   }
 
   return Math.max(0, Math.min(8, nextCount));
+}
+
+function normalizeNoteCount(value, mode) {
+  const fallback = getModeConfig(mode).taskCount;
+  const nextCount = Number.parseInt(value, 10);
+  if (!Number.isFinite(nextCount)) {
+    return fallback;
+  }
+
+  return Math.max(4, Math.min(16, nextCount));
 }
 
 function parseAllowedOrigins(value) {
@@ -231,6 +234,7 @@ function normalizeShadowState(player, now = Date.now()) {
     shadowDashCooldownUntil: player.shadowDashCooldownUntil || 0,
     shadowMarkCooldownUntil: player.shadowMarkCooldownUntil || 0,
     slowedUntil: player.slowedUntil || 0,
+    stunnedUntil: player.stunnedUntil || 0,
     revealedUntil: player.revealedUntil || 0,
     shadowMarkedUntil: player.shadowMarkedUntil || 0,
     shadowMarkedBy: player.shadowMarkedBy || null,
@@ -261,6 +265,7 @@ function makeRoom(code) {
     status: "lobby",
     mode: "classic",
     botCount: 0,
+    noteCount: getModeConfig("classic").taskCount,
     players: new Map(),
     score: 0,
     winner: null,
@@ -371,6 +376,7 @@ function createBot(room, index) {
     alive: true,
     cooldownUntil: 0,
     speedBoostUntil: 0,
+    stunnedUntil: 0,
     shadowDashUntil: 0,
     shadowDashCooldownUntil: 0,
     shadowMarkCooldownUntil: 0,
@@ -601,6 +607,7 @@ function roomSnapshot(room, requesterId) {
     modeLabel: getModeConfig(room.mode).label,
     pace: getModeConfig(room.mode).pace,
     botCount: desiredBotCount(room),
+    noteCount: room.noteCount,
     minRecommended: ROOM_SIZE_MIN,
     maxAllowed: ROOM_SIZE_MAX,
     noteTarget: NOTE_TARGET,
@@ -645,7 +652,7 @@ function resetLobby(room) {
   room.reason = "";
   room.startedAt = null;
   room.endsAt = null;
-  room.tasks = createTasks(getModeConfig(room.mode).taskCount);
+  room.tasks = createTasks(room.noteCount);
   room.interactables = createInteractables();
   room.chat = room.chat.slice(-CHAT_LIMIT);
   syncBots(room);
@@ -660,6 +667,7 @@ function resetLobby(room) {
     player.role = "crew";
     player.cooldownUntil = 0;
     player.speedBoostUntil = 0;
+    player.stunnedUntil = 0;
     player.shadowDashUntil = 0;
     player.shadowDashCooldownUntil = 0;
     player.shadowMarkCooldownUntil = 0;
@@ -694,7 +702,7 @@ function startRound(room) {
   room.reason = "";
   room.startedAt = Date.now();
   room.endsAt = room.startedAt + modeConfig.roundTimeMs;
-  room.tasks = createTasks(modeConfig.taskCount);
+  room.tasks = createTasks(room.noteCount);
 
   const shadowPlayer = pickShadowPlayer(room, players);
   players.forEach((player, i) => {
@@ -702,6 +710,7 @@ function startRound(room) {
     player.alive = true;
     player.cooldownUntil = 0;
     player.speedBoostUntil = 0;
+    player.stunnedUntil = 0;
     player.shadowDashUntil = 0;
     player.shadowDashCooldownUntil = 0;
     player.shadowMarkCooldownUntil = 0;
@@ -741,15 +750,16 @@ function startRound(room) {
       const boostMultiplier = player.speedBoostUntil && player.speedBoostUntil > now ? 1.35 : 1;
       const shadowDashMultiplier = player.role === "shadow" && player.shadowDashUntil && player.shadowDashUntil > now ? 1.5 : 1;
       const slowMultiplier = player.slowedUntil && player.slowedUntil > now ? 0.72 : 1;
-      player.x += player.vx * speed * boostMultiplier * shadowDashMultiplier * slowMultiplier * delta;
-      player.y += player.vy * speed * boostMultiplier * shadowDashMultiplier * slowMultiplier * delta;
+      const stunMultiplier = player.stunnedUntil && player.stunnedUntil > now ? 0 : 1;
+      player.x += player.vx * speed * boostMultiplier * shadowDashMultiplier * slowMultiplier * stunMultiplier * delta;
+      player.y += player.vy * speed * boostMultiplier * shadowDashMultiplier * slowMultiplier * stunMultiplier * delta;
       resolveWallCollision(player, room.walls);
       player.x = Math.max(20, Math.min(WORLD_WIDTH - 20, player.x));
       player.y = Math.max(20, Math.min(WORLD_HEIGHT - 20, player.y));
     }
 
-    if (room.tasks.length < modeConfig.taskCount) {
-      while (room.tasks.length < modeConfig.taskCount) {
+    if (room.tasks.length < room.noteCount) {
+      while (room.tasks.length < room.noteCount) {
         room.tasks.push(createTask(`t${Date.now()}${Math.floor(Math.random() * 999)}`, room.tasks.length));
       }
     }
@@ -818,7 +828,7 @@ function removePlayer(socketId) {
 }
 
 io.on("connection", (socket) => {
-  socket.on("room:create", ({ name, mode, botCount }) => {
+  socket.on("room:create", ({ name, mode, botCount, noteCount }) => {
     const code = randomId();
     const room = makeRoom(code);
     rooms.set(code, room);
@@ -835,11 +845,13 @@ io.on("connection", (socket) => {
       alive: true,
       cooldownUntil: 0,
       speedBoostUntil: 0,
+      stunnedUntil: 0,
     });
 
     room.mode = normalizeMode(mode);
     room.botCount = room.mode === "classic" ? 0 : normalizeBotCount(botCount, room.mode);
-    room.tasks = createTasks(getModeConfig(room.mode).taskCount);
+    room.noteCount = normalizeNoteCount(noteCount, room.mode);
+    room.tasks = createTasks(room.noteCount);
     syncBots(room);
 
     socket.join(code);
@@ -870,6 +882,7 @@ io.on("connection", (socket) => {
       alive: true,
       cooldownUntil: 0,
       speedBoostUntil: 0,
+      stunnedUntil: 0,
     });
 
     socket.join(room.code);
@@ -877,7 +890,7 @@ io.on("connection", (socket) => {
     broadcastRoom(room);
   });
 
-  socket.on("room:settings", ({ roomCode, mode, botCount }) => {
+  socket.on("room:settings", ({ roomCode, mode, botCount, noteCount }) => {
     const room = rooms.get(String(roomCode || "").toUpperCase());
     if (!room || room.hostId !== socket.id || room.status !== "lobby") {
       return;
@@ -885,7 +898,8 @@ io.on("connection", (socket) => {
 
     room.mode = normalizeMode(mode);
     room.botCount = room.mode === "classic" ? 0 : normalizeBotCount(botCount, room.mode);
-    room.tasks = createTasks(getModeConfig(room.mode).taskCount);
+    room.noteCount = normalizeNoteCount(noteCount, room.mode);
+    room.tasks = createTasks(room.noteCount);
     syncBots(room);
     broadcastRoom(room);
   });
@@ -989,6 +1003,12 @@ io.on("connection", (socket) => {
 
     const typed = sanitizeNoteCode(code);
     if (typed !== note.code) {
+      player.stunnedUntil = Date.now() + 3000;
+      player.vx = 0;
+      player.vy = 0;
+      room.chat.push(createChatEntry({ id: "system", name: "System" }, `${player.name} is stunned!`));
+      room.chat = room.chat.slice(-CHAT_LIMIT);
+      broadcastRoom(room);
       socket.emit("error:message", "Wrong note code.");
       return;
     }
