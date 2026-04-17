@@ -21,14 +21,14 @@ const MODE_PRESETS = {
   },
   practice: {
     label: "Practice",
-    description: "Bots fill the room so you can drill movement, tasks, and tagging.",
+    description: "Bots fill the room so you can drill movement, notes, and tagging.",
     botCount: 4,
     paceLabel: "1.08x pace",
     tone: "training",
   },
   chaos: {
     label: "Chaos",
-    description: "Faster rounds, more tasks, and more pressure.",
+    description: "Faster rounds, more notes, and more pressure.",
     botCount: 6,
     paceLabel: "1.20x pace",
     tone: "wild",
@@ -88,6 +88,7 @@ export default function App() {
   const [roomCode, setRoomCode] = useState("");
   const [snapshot, setSnapshot] = useState(null);
   const [chatInput, setChatInput] = useState("");
+  const [showMenus, setShowMenus] = useState(true);
   const [draftMode, setDraftMode] = useState("practice");
   const [draftBotCount, setDraftBotCount] = useState(MODE_PRESETS.practice.botCount);
 
@@ -112,6 +113,10 @@ export default function App() {
   const modeTone = currentPreset.tone;
   const chatMessages = snapshot?.chat ?? [];
   const isPlaying = joined && snapshot?.status === "active";
+  const overlaysVisible = !isPlaying || showMenus;
+  const noteTarget = snapshot?.noteTarget ?? snapshot?.taskTarget ?? 8;
+  const shadowDashReady = Boolean(me?.isShadow) && (me?.shadowDashCooldownUntil ?? 0) <= (snapshot?.now ?? Date.now());
+  const shadowMarkReady = Boolean(me?.isShadow) && (me?.shadowMarkCooldownUntil ?? 0) <= (snapshot?.now ?? Date.now());
 
   const nearestInteractable = useMemo(() => {
     if (!snapshot || !me) {
@@ -119,7 +124,7 @@ export default function App() {
     }
 
     let nearest = null;
-    for (const item of [...(snapshot.tasks ?? []), ...(snapshot.interactables ?? [])]) {
+    for (const item of [...(snapshot.notes ?? snapshot.tasks ?? []), ...(snapshot.interactables ?? [])]) {
       if (!item.available) {
         continue;
       }
@@ -177,6 +182,15 @@ export default function App() {
   }, [snapshot]);
 
   useEffect(() => {
+    if (snapshot?.status === "active") {
+      setShowMenus(false);
+      return;
+    }
+
+    setShowMenus(true);
+  }, [snapshot?.status]);
+
+  useEffect(() => {
     const shouldFullscreen = joined && snapshot?.status === "active";
 
     if (shouldFullscreen && !document.fullscreenElement && document.documentElement.requestFullscreen) {
@@ -196,14 +210,36 @@ export default function App() {
       }
 
       const key = event.key.toLowerCase();
-      if (key === "w" || key === "arrowup") keysRef.current.up = true;
-      if (key === "s" || key === "arrowdown") keysRef.current.down = true;
-      if (key === "a" || key === "arrowleft") keysRef.current.left = true;
-      if (key === "d" || key === "arrowright") keysRef.current.right = true;
+      if (key === "w" || key === "arrowup") {
+        event.preventDefault();
+        keysRef.current.up = true;
+      }
+      if (key === "s" || key === "arrowdown") {
+        event.preventDefault();
+        keysRef.current.down = true;
+      }
+      if (key === "a" || key === "arrowleft") {
+        event.preventDefault();
+        keysRef.current.left = true;
+      }
+      if (key === "d" || key === "arrowright") {
+        event.preventDefault();
+        keysRef.current.right = true;
+      }
 
       if ((key === " " || key === "space") && roomCode) {
         event.preventDefault();
         socket.emit("player:tag", { roomCode });
+      }
+
+      if (me?.isShadow && key === "q" && roomCode && snapshot?.status === "active") {
+        event.preventDefault();
+        socket.emit("player:shadow-skill", { roomCode, skill: "mark" });
+      }
+
+      if (me?.isShadow && key === "shift" && roomCode && snapshot?.status === "active") {
+        event.preventDefault();
+        socket.emit("player:shadow-skill", { roomCode, skill: "dash" });
       }
 
       if (key === "e" && roomCode && snapshot?.status !== "lobby") {
@@ -227,7 +263,7 @@ export default function App() {
       window.removeEventListener("keydown", keyDown);
       window.removeEventListener("keyup", keyUp);
     };
-  }, [roomCode]);
+  }, [roomCode, me?.isShadow, snapshot?.status]);
 
   useEffect(() => {
     let rafId = 0;
@@ -277,7 +313,7 @@ export default function App() {
         return;
       }
 
-      const dt = 0.2;
+      const dt = 0.35;
       const world = snapshot.world;
       const tracked = renderPlayersRef.current;
 
@@ -291,6 +327,12 @@ export default function App() {
         prev.x = lerp(prev.x, player.x, dt);
         prev.y = lerp(prev.y, player.y, dt);
       });
+
+      const selfTracked = tracked.get(me.id);
+      if (selfTracked) {
+        selfTracked.x = me.x;
+        selfTracked.y = me.y;
+      }
 
       for (const key of [...tracked.keys()]) {
         if (!snapshot.players.some((player) => player.id === key)) {
@@ -337,7 +379,7 @@ export default function App() {
         ctx.strokeRect(x, y, wall.w, wall.h);
       });
 
-      snapshot.tasks.forEach((item) => {
+      (snapshot.notes ?? snapshot.tasks ?? []).forEach((item) => {
         const active = item.available;
         ctx.save();
         ctx.translate(item.x, item.y);
@@ -352,7 +394,7 @@ export default function App() {
         ctx.fillStyle = "#0f172a";
         ctx.font = "700 11px Outfit";
         ctx.textAlign = "center";
-        ctx.fillText(item.label.slice(0, 2).toUpperCase(), 0, 4);
+        ctx.fillText("N", 0, 4);
         ctx.restore();
       });
 
@@ -511,7 +553,6 @@ export default function App() {
   }
 
   const players = snapshot?.players ?? [];
-  const taskTarget = snapshot?.taskTarget ?? 8;
   const remaining = snapshot?.endsAt
     ? Math.max(0, Math.ceil((snapshot.endsAt - (snapshot.now ?? Date.now())) / 1000))
     : 180;
@@ -524,25 +565,7 @@ export default function App() {
       <div className="ambient ambient-b" />
       <main className={`game-shell ${isPlaying ? "is-playing" : ""}`}>
         <header className="masthead">
-          <div>
-            <p className="eyebrow">Arcade social chase</p>
-            <h1>Bonko</h1>
-            <p className="lede">A sharper little multiplayer arena with practice bots, pacing modes, and cleaner match controls.</p>
-          </div>
-          <div className="masthead__stats">
-            <div>
-              <span>Mode</span>
-              <strong>{currentPreset.label}</strong>
-            </div>
-            <div>
-              <span>Pace</span>
-              <strong>{currentPreset.paceLabel}</strong>
-            </div>
-            <div>
-              <span>Bots</span>
-              <strong>{currentMode === "classic" ? 0 : currentBotCount}</strong>
-            </div>
-          </div>
+          <h1>Bonko</h1>
         </header>
 
         {!joined && (
@@ -643,8 +666,13 @@ export default function App() {
                 </div>
                 <div className="hud-strip">
                   <span>{players.length} players</span>
-                  <span>{roomScore}/{taskTarget} tasks</span>
+                  <span>{roomScore}/{noteTarget} notes</span>
                   <span>{formatSeconds(remaining)}</span>
+                  {isPlaying && (
+                    <button type="button" className="overlay-toggle" onClick={() => setShowMenus((visible) => !visible)}>
+                      {overlaysVisible ? "Hide Menus" : "Show Menus"}
+                    </button>
+                  )}
                 </div>
               </div>
 
@@ -659,7 +687,7 @@ export default function App() {
               </div>
             </section>
 
-            <aside className="sidebar">
+            {overlaysVisible && <aside className="sidebar">
               <section className="panel mini-panel pop-in">
                 <div className="panel__head">
                   <span className="panel__kicker">Match state</span>
@@ -738,10 +766,22 @@ export default function App() {
                   <p className="muted">
                     {me?.isShadow
                       ? cooldown > 0
-                        ? `Tag cooldown: ${cooldown}s`
-                        : "Press Space to tag nearby crew."
-                        : "Complete tasks, stay alive, and watch the shadow."}
+                          ? `Tag cooldown: ${cooldown}s`
+                          : "Press Space to tag nearby crew. Q marks a target, Shift dashes."
+                      : "Collect hidden notes, stay alive, and watch the shadow."}
                   </p>
+                  {me?.isShadow && (
+                    <div className="shadow-skill-grid">
+                      <div>
+                        <span>Dash</span>
+                        <strong>{shadowDashReady ? "Ready" : `${Math.max(0, Math.ceil(((me?.shadowDashCooldownUntil ?? 0) - (snapshot?.now ?? Date.now())) / 1000))}s`}</strong>
+                      </div>
+                      <div>
+                        <span>Mark</span>
+                        <strong>{shadowMarkReady ? "Ready" : `${Math.max(0, Math.ceil(((me?.shadowMarkCooldownUntil ?? 0) - (snapshot?.now ?? Date.now())) / 1000))}s`}</strong>
+                      </div>
+                    </div>
+                  )}
                 </section>
               )}
 
@@ -797,11 +837,11 @@ export default function App() {
                   <button type="submit">Send</button>
                 </form>
               </section>
-            </aside>
+            </aside>}
           </section>
         )}
 
-        {joined && snapshot && (
+        {joined && snapshot && overlaysVisible && (
           <footer className="control-bar">
             <div className="control-chip">
               <strong>Controls</strong>
@@ -813,10 +853,24 @@ export default function App() {
               <span>Tag</span>
               <p>Space as Shadow</p>
             </div>
+            {me?.isShadow && (
+              <>
+                <div className="control-chip">
+                  <strong>Skill 1</strong>
+                  <span>Q</span>
+                  <p>Mark a nearby crew member</p>
+                </div>
+                <div className="control-chip">
+                  <strong>Skill 2</strong>
+                  <span>Shift</span>
+                  <p>Dash forward to close distance</p>
+                </div>
+              </>
+            )}
             <div className="control-chip">
               <strong>Interact</strong>
               <span>E</span>
-              <p>{nearestInteractable ? nearestInteractable.label : "Move near a pad or cache"}</p>
+              <p>{nearestInteractable ? nearestInteractable.label : "Move near a note, pad, or cache"}</p>
             </div>
             <div className="control-chip accent">
               <strong>Chat</strong>

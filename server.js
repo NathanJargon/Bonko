@@ -16,16 +16,21 @@ const INTERACT_RADIUS = 42;
 const CHAT_LIMIT = 12;
 const TAG_DISTANCE = 52;
 const TAG_COOLDOWN_MS = 8000;
-const TASK_TARGET = 8;
-const TASK_COOLDOWN_MS = 14000;
-const TASK_VALUE = 1;
+const NOTE_TARGET = 8;
+const NOTE_COOLDOWN_MS = 14000;
+const NOTE_VALUE = 1;
+const SHADOW_DASH_MS = 1400;
+const SHADOW_DASH_COOLDOWN_MS = 7000;
+const SHADOW_MARK_RANGE = 200;
+const SHADOW_MARK_MS = 3600;
+const SHADOW_MARK_COOLDOWN_MS = 11000;
 const MODE_CONFIGS = {
   classic: {
     label: "Classic",
     pace: 1,
     botCount: 0,
     roundTimeMs: ROUND_TIME_MS,
-    taskCount: 7,
+    taskCount: 8,
   },
   practice: {
     label: "Practice",
@@ -130,23 +135,23 @@ function randomSpawn() {
 
 function createTask(id, index = 0) {
   const taskPresets = [
-    { label: "Calibrate console", kind: "calibrate" },
-    { label: "Reroute power", kind: "reroute" },
-    { label: "Prime beacon", kind: "prime" },
-    { label: "Patch relay", kind: "patch" },
-    { label: "Sync telemetry", kind: "sync" },
-    { label: "Restart module", kind: "restart" },
+    { label: "Hidden Note", kind: "note" },
+    { label: "Hidden Note", kind: "note" },
+    { label: "Hidden Note", kind: "note" },
+    { label: "Hidden Note", kind: "note" },
+    { label: "Hidden Note", kind: "note" },
+    { label: "Hidden Note", kind: "note" },
   ];
   const preset = taskPresets[index % taskPresets.length];
   return {
     id,
     ...randomSpawn(),
-    kind: "task",
+    kind: "note",
     label: preset.label,
     taskKind: preset.kind,
     r: 22,
-    value: TASK_VALUE,
-    cooldownMs: TASK_COOLDOWN_MS,
+    value: NOTE_VALUE,
+    cooldownMs: NOTE_COOLDOWN_MS,
     availableAt: 0,
   };
 }
@@ -173,6 +178,10 @@ function createInteractables() {
 
 function createTasks(count) {
   return Array.from({ length: count }, (_, index) => createTask(`t${index}`, index));
+}
+
+function createNoteMessage(player, note) {
+  return `${player.name} found a hidden note.`;
 }
 
 function normalizeWalls(walls) {
@@ -208,6 +217,20 @@ function normalizeTasks(tasks, now = Date.now()) {
     r: task.r,
     available: now >= task.availableAt,
   }));
+}
+
+function normalizeShadowState(player, now = Date.now()) {
+  return {
+    shadowDashUntil: player.shadowDashUntil || 0,
+    shadowDashCooldownUntil: player.shadowDashCooldownUntil || 0,
+    shadowMarkCooldownUntil: player.shadowMarkCooldownUntil || 0,
+    slowedUntil: player.slowedUntil || 0,
+    revealedUntil: player.revealedUntil || 0,
+    shadowMarkedUntil: player.shadowMarkedUntil || 0,
+    shadowMarkedBy: player.shadowMarkedBy || null,
+    dashReady: now >= (player.shadowDashCooldownUntil || 0),
+    markReady: now >= (player.shadowMarkCooldownUntil || 0),
+  };
 }
 
 function createChatEntry(player, text) {
@@ -301,13 +324,12 @@ function getNearestInteractable(room, player) {
 function applyInteractableEffect(room, player, item, now = Date.now()) {
   item.availableAt = now + (item.cooldownMs || 0);
 
-  if (item.kind === "task") {
+  if (item.kind === "note") {
     if (player.role === "crew" && room.status === "active") {
       room.score += item.value || 1;
     }
 
-    const taskName = item.label.toLowerCase();
-    return `${player.name} completed ${taskName}.`;
+    return createNoteMessage(player, item);
   }
 
   if (item.kind === "boost") {
@@ -347,6 +369,11 @@ function createBot(room, index) {
     alive: true,
     cooldownUntil: 0,
     speedBoostUntil: 0,
+    shadowDashUntil: 0,
+    shadowDashCooldownUntil: 0,
+    shadowMarkCooldownUntil: 0,
+    slowedUntil: 0,
+    revealedUntil: 0,
     bot: true,
   };
 }
@@ -401,6 +428,70 @@ function steerWithWobble(source, targetX, targetY, speedMultiplier, wobble = 0.1
   source.vy = Math.sin(angle + offset) * speedMultiplier;
 }
 
+function triggerShadowDash(shadow, now = Date.now()) {
+  shadow.speedBoostUntil = now + SHADOW_DASH_MS;
+  shadow.shadowDashUntil = now + SHADOW_DASH_MS;
+  shadow.shadowDashCooldownUntil = now + SHADOW_DASH_COOLDOWN_MS;
+}
+
+function triggerShadowMark(room, shadow, now = Date.now()) {
+  let marked = null;
+
+  for (const player of room.players.values()) {
+    if (player.role !== "crew" || !player.alive) {
+      continue;
+    }
+
+    const dx = player.x - shadow.x;
+    const dy = player.y - shadow.y;
+    if (dx * dx + dy * dy > SHADOW_MARK_RANGE * SHADOW_MARK_RANGE) {
+      continue;
+    }
+
+    if (!marked) {
+      marked = player;
+    }
+
+    player.slowedUntil = now + SHADOW_MARK_MS;
+    player.revealedUntil = now + SHADOW_MARK_MS;
+  }
+
+  if (marked) {
+    shadow.shadowMarkCooldownUntil = now + SHADOW_MARK_COOLDOWN_MS;
+    room.chat.push(createChatEntry({ id: "system", name: "System" }, `${shadow.name} marked ${marked.name}.`));
+    room.chat = room.chat.slice(-CHAT_LIMIT);
+    return true;
+  }
+
+  return false;
+}
+
+function maybeUseShadowSkill(room, shadow, now = Date.now()) {
+  const nearestCrew = [...room.players.values()]
+    .filter((player) => player.role === "crew" && player.alive)
+    .reduce((best, player) => {
+      const dx = player.x - shadow.x;
+      const dy = player.y - shadow.y;
+      const distance = dx * dx + dy * dy;
+      if (best === null || distance < best.distance) {
+        return { distance, player };
+      }
+      return best;
+    }, null);
+
+  if (!nearestCrew) {
+    return;
+  }
+
+  if (now >= shadow.shadowMarkCooldownUntil && nearestCrew.distance <= 320 * 320 && Math.random() > 0.35) {
+    triggerShadowMark(room, shadow, now);
+  }
+
+  if (now >= shadow.shadowDashCooldownUntil && nearestCrew.distance > 120 * 120 && nearestCrew.distance < 600 * 600 && Math.random() > 0.55) {
+    triggerShadowDash(shadow, now);
+  }
+}
+
 function updateBotBrain(room, bot) {
   const modeConfig = getModeConfig(room.mode);
   const botSpeed = modeConfig.pace * 0.6;
@@ -418,6 +509,8 @@ function updateBotBrain(room, bot) {
   }
 
   if (bot.role === "shadow") {
+    maybeUseShadowSkill(room, bot, Date.now());
+
     const nearestCrew = [...room.players.values()]
       .filter((player) => player.role === "crew" && player.alive && !isBotPlayer(player))
       .reduce((best, player) => {
@@ -475,6 +568,7 @@ function updateBotBrain(room, bot) {
 }
 
 function roomSnapshot(room, requesterId) {
+  const now = Date.now();
   const players = [...room.players.values()].map((p) => {
     const base = {
       id: p.id,
@@ -487,6 +581,7 @@ function roomSnapshot(room, requesterId) {
       isShadow: p.role === "shadow",
       cooldownUntil: p.cooldownUntil,
       speedBoostUntil: p.speedBoostUntil,
+      ...normalizeShadowState(p, now),
       bot: isBotPlayer(p),
     };
 
@@ -506,16 +601,17 @@ function roomSnapshot(room, requesterId) {
     botCount: desiredBotCount(room),
     minRecommended: ROOM_SIZE_MIN,
     maxAllowed: ROOM_SIZE_MAX,
-    taskTarget: TASK_TARGET,
+    noteTarget: NOTE_TARGET,
     status: room.status,
     score: room.score,
     winner: room.winner,
     reason: room.reason,
     startsAt: room.startedAt,
     endsAt: room.endsAt,
-    now: Date.now(),
+    now,
     world: { width: WORLD_WIDTH, height: WORLD_HEIGHT },
     tasks: normalizeTasks(room.tasks),
+    notes: normalizeTasks(room.tasks),
     walls: normalizeWalls(room.walls),
     interactables: normalizeInteractables(room.interactables),
     chat: room.chat,
@@ -562,6 +658,11 @@ function resetLobby(room) {
     player.role = "crew";
     player.cooldownUntil = 0;
     player.speedBoostUntil = 0;
+    player.shadowDashUntil = 0;
+    player.shadowDashCooldownUntil = 0;
+    player.shadowMarkCooldownUntil = 0;
+    player.slowedUntil = 0;
+    player.revealedUntil = 0;
   }
 
   broadcastRoom(room);
@@ -599,6 +700,11 @@ function startRound(room) {
     player.alive = true;
     player.cooldownUntil = 0;
     player.speedBoostUntil = 0;
+    player.shadowDashUntil = 0;
+    player.shadowDashCooldownUntil = 0;
+    player.shadowMarkCooldownUntil = 0;
+    player.slowedUntil = 0;
+    player.revealedUntil = 0;
     const spawn = randomSpawn();
     player.x = spawn.x;
     player.y = spawn.y;
@@ -631,8 +737,10 @@ function startRound(room) {
       }
 
       const boostMultiplier = player.speedBoostUntil && player.speedBoostUntil > now ? 1.35 : 1;
-      player.x += player.vx * speed * boostMultiplier * delta;
-      player.y += player.vy * speed * boostMultiplier * delta;
+      const shadowDashMultiplier = player.role === "shadow" && player.shadowDashUntil && player.shadowDashUntil > now ? 1.5 : 1;
+      const slowMultiplier = player.slowedUntil && player.slowedUntil > now ? 0.72 : 1;
+      player.x += player.vx * speed * boostMultiplier * shadowDashMultiplier * slowMultiplier * delta;
+      player.y += player.vy * speed * boostMultiplier * shadowDashMultiplier * slowMultiplier * delta;
       resolveWallCollision(player, room.walls);
       player.x = Math.max(20, Math.min(WORLD_WIDTH - 20, player.x));
       player.y = Math.max(20, Math.min(WORLD_HEIGHT - 20, player.y));
@@ -662,8 +770,8 @@ function startRound(room) {
       }
     }
 
-    if (room.score >= TASK_TARGET) {
-      stopGame(room, "crew", "Crew completed enough tasks.");
+    if (room.score >= NOTE_TARGET) {
+      stopGame(room, "crew", "Crew collected enough hidden notes.");
       return;
     }
 
@@ -928,6 +1036,41 @@ io.on("connection", (socket) => {
     }
 
     broadcastRoom(room);
+  });
+
+  socket.on("player:shadow-skill", ({ roomCode, skill }) => {
+    const room = rooms.get(String(roomCode || "").toUpperCase());
+    if (!room || room.status !== "active") {
+      return;
+    }
+
+    const shadow = room.players.get(socket.id);
+    if (!shadow || !shadow.alive || shadow.role !== "shadow") {
+      return;
+    }
+
+    const now = Date.now();
+    if (skill === "dash") {
+      if (now < shadow.shadowDashCooldownUntil) {
+        return;
+      }
+
+      triggerShadowDash(shadow, now);
+      room.chat.push(createChatEntry({ id: "system", name: "System" }, `${shadow.name} surged forward.`));
+      room.chat = room.chat.slice(-CHAT_LIMIT);
+      broadcastRoom(room);
+      return;
+    }
+
+    if (skill === "mark") {
+      if (now < shadow.shadowMarkCooldownUntil) {
+        return;
+      }
+
+      if (triggerShadowMark(room, shadow, now)) {
+        broadcastRoom(room);
+      }
+    }
   });
 
   socket.on("disconnect", () => {

@@ -152,11 +152,10 @@ input {
 }
 
 .masthead {
-  display: flex;
-  justify-content: space-between;
-  gap: 18px;
-  align-items: end;
-  padding: 8px 2px 2px;
+  display: grid;
+  place-items: center;
+  text-align: center;
+  padding: 6px 2px 4px;
 }
 
 .eyebrow {
@@ -170,7 +169,7 @@ input {
 .masthead h1 {
   margin: 0;
   font-family: Fredoka, sans-serif;
-  font-size: clamp(2.4rem, 7vw, 4.8rem);
+  font-size: clamp(1.7rem, 3.8vw, 2.8rem);
   letter-spacing: 0.02em;
   line-height: 0.9;
 }
@@ -521,6 +520,17 @@ button.ghost {
   font-size: 0.84rem;
 }
 
+.overlay-toggle {
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  background: rgba(8, 14, 28, 0.92);
+  color: var(--ink);
+  border-radius: 999px;
+  padding: 7px 12px;
+  font-size: 0.8rem;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
 .canvas-wrap {
   position: relative;
 }
@@ -595,7 +605,7 @@ canvas {
   z-index: 8;
   width: min(1280px, calc(100vw - 20px));
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr)) auto;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
   gap: 10px;
   align-items: stretch;
   padding: 10px;
@@ -640,7 +650,33 @@ canvas {
 .control-action {
   align-self: stretch;
   padding-inline: 18px;
-  min-width: 130px;
+  min-width: 0;
+}
+
+.shadow-skill-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.shadow-skill-grid div {
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 14px;
+  padding: 10px 12px;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.shadow-skill-grid span {
+  display: block;
+  color: var(--accent);
+  font-size: 0.72rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.shadow-skill-grid strong {
+  display: block;
+  margin-top: 6px;
 }
 
 .sidebar {
