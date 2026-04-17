@@ -265,6 +265,11 @@ export default function App() {
         socket.emit("player:tag", { roomCode });
       }
 
+      if (key === "e" && nearestNote) {
+        event.preventDefault();
+        return;
+      }
+
       if (me?.isShadow && key === "q" && roomCode && snapshot?.status === "active") {
         event.preventDefault();
         socket.emit("player:shadow-skill", { roomCode, skill: "mark" });
@@ -296,7 +301,7 @@ export default function App() {
       window.removeEventListener("keydown", keyDown);
       window.removeEventListener("keyup", keyUp);
     };
-  }, [roomCode, me?.isShadow, snapshot?.status]);
+  }, [roomCode, me?.isShadow, snapshot?.status, nearestNote]);
 
   useEffect(() => {
     let rafId = 0;
@@ -315,10 +320,12 @@ export default function App() {
       const rawX = Number(keysRef.current.right) - Number(keysRef.current.left);
       const rawY = Number(keysRef.current.down) - Number(keysRef.current.up);
       const magnitude = Math.hypot(rawX, rawY);
-      const vx = magnitude > 0 ? rawX / magnitude : 0;
-      const vy = magnitude > 0 ? rawY / magnitude : 0;
+      const targetVx = magnitude > 0 ? rawX / magnitude : 0;
+      const targetVy = magnitude > 0 ? rawY / magnitude : 0;
+      const vx = moveRef.current.vx + (targetVx - moveRef.current.vx) * 0.3;
+      const vy = moveRef.current.vy + (targetVy - moveRef.current.vy) * 0.3;
 
-      if (vx === moveRef.current.vx && vy === moveRef.current.vy) {
+      if (Math.abs(vx - moveRef.current.vx) < 0.01 && Math.abs(vy - moveRef.current.vy) < 0.01) {
         return;
       }
 
@@ -608,11 +615,7 @@ export default function App() {
   }
 
   function handleInteract() {
-    if (!roomCode || snapshot?.status === "lobby") {
-      return;
-    }
-
-    if (nearestNote) {
+    if (!roomCode || snapshot?.status === "lobby" || nearestNote) {
       return;
     }
 
@@ -963,7 +966,7 @@ export default function App() {
             <div className="control-chip">
               <strong>Interact</strong>
               <span>E</span>
-              <p>{nearestInteractable ? nearestInteractable.label : nearestNote ? "Type the hidden note code" : "Move near a pad or cache"}</p>
+              <p>{nearestInteractable ? nearestInteractable.label : nearestNote ? "Type the hidden note code" : "Move near a pad"}</p>
             </div>
             <div className="control-chip accent">
               <strong>Chat</strong>

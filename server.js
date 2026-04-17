@@ -174,8 +174,6 @@ function createInteractables() {
   return [
     { id: "i1", kind: "boost", label: "Boost Pad", x: 470, y: 950, r: 26, cooldownMs: 12000, availableAt: 0 },
     { id: "i2", kind: "boost", label: "Boost Pad", x: 1730, y: 460, r: 26, cooldownMs: 12000, availableAt: 0 },
-    { id: "i3", kind: "cache", label: "Supply Cache", x: 1050, y: 650, r: 28, cooldownMs: 15000, availableAt: 0 },
-    { id: "i4", kind: "cache", label: "Supply Cache", x: 340, y: 350, r: 28, cooldownMs: 15000, availableAt: 0 },
   ];
 }
 
@@ -309,7 +307,7 @@ function resolveWallCollision(player, walls) {
 function getNearestInteractable(room, player) {
   let nearest = null;
 
-  for (const item of [...room.tasks, ...room.interactables]) {
+  for (const item of room.interactables) {
     if (Date.now() < item.availableAt) {
       continue;
     }
