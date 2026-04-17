@@ -10,36 +10,36 @@ const WORLD_WIDTH = 2200;
 const WORLD_HEIGHT = 1400;
 const ROUND_TIME_MS = 3 * 60 * 1000;
 const TICK_MS = 50;
-const PLAYER_SPEED = 380;
+const PLAYER_SPEED = 410;
 const PLAYER_RADIUS = 20;
 const INTERACT_RADIUS = 42;
 const CHAT_LIMIT = 12;
 const TAG_DISTANCE = 52;
 const TAG_COOLDOWN_MS = 8000;
-const CREW_SCORE_TARGET = 28;
-const SHARD_VALUE = 1;
-const SHARD_COUNT = 32;
+const TASK_TARGET = 8;
+const TASK_COOLDOWN_MS = 14000;
+const TASK_VALUE = 1;
 const MODE_CONFIGS = {
   classic: {
     label: "Classic",
     pace: 1,
     botCount: 0,
     roundTimeMs: ROUND_TIME_MS,
-    shardCount: SHARD_COUNT,
+    taskCount: 7,
   },
   practice: {
     label: "Practice",
-    pace: 1.08,
+    pace: 1.02,
     botCount: 4,
     roundTimeMs: ROUND_TIME_MS,
-    shardCount: SHARD_COUNT,
+    taskCount: 8,
   },
   chaos: {
     label: "Chaos",
-    pace: 1.2,
+    pace: 1.12,
     botCount: 6,
     roundTimeMs: 2.5 * 60 * 1000,
-    shardCount: 40,
+    taskCount: 10,
   },
 };
 const DEFAULT_ALLOWED_ORIGINS = ["http://localhost:5173", "http://127.0.0.1:5173"];
@@ -128,12 +128,26 @@ function randomSpawn() {
   };
 }
 
-function createShard(id) {
+function createTask(id, index = 0) {
+  const taskPresets = [
+    { label: "Calibrate console", kind: "calibrate" },
+    { label: "Reroute power", kind: "reroute" },
+    { label: "Prime beacon", kind: "prime" },
+    { label: "Patch relay", kind: "patch" },
+    { label: "Sync telemetry", kind: "sync" },
+    { label: "Restart module", kind: "restart" },
+  ];
+  const preset = taskPresets[index % taskPresets.length];
   return {
     id,
     ...randomSpawn(),
-    r: 12,
-    value: SHARD_VALUE,
+    kind: "task",
+    label: preset.label,
+    taskKind: preset.kind,
+    r: 22,
+    value: TASK_VALUE,
+    cooldownMs: TASK_COOLDOWN_MS,
+    availableAt: 0,
   };
 }
 
@@ -157,6 +171,10 @@ function createInteractables() {
   ];
 }
 
+function createTasks(count) {
+  return Array.from({ length: count }, (_, index) => createTask(`t${index}`, index));
+}
+
 function normalizeWalls(walls) {
   return walls.map((wall) => ({
     id: wall.id,
@@ -176,6 +194,19 @@ function normalizeInteractables(interactables, now = Date.now()) {
     y: item.y,
     r: item.r,
     available: now >= item.availableAt,
+  }));
+}
+
+function normalizeTasks(tasks, now = Date.now()) {
+  return tasks.map((task) => ({
+    id: task.id,
+    kind: task.kind,
+    taskKind: task.taskKind,
+    label: task.label,
+    x: task.x,
+    y: task.y,
+    r: task.r,
+    available: now >= task.availableAt,
   }));
 }
 
@@ -207,7 +238,7 @@ function makeRoom(code) {
     startedAt: null,
     endsAt: null,
     ticker: null,
-    shards: [],
+    tasks: [],
     walls: createWalls(),
     interactables: createInteractables(),
     chat: [],
@@ -247,7 +278,7 @@ function resolveWallCollision(player, walls) {
 function getNearestInteractable(room, player) {
   let nearest = null;
 
-  for (const item of room.interactables) {
+  for (const item of [...room.tasks, ...room.interactables]) {
     if (Date.now() < item.availableAt) {
       continue;
     }
@@ -268,7 +299,16 @@ function getNearestInteractable(room, player) {
 }
 
 function applyInteractableEffect(room, player, item, now = Date.now()) {
-  item.availableAt = now + item.cooldownMs;
+  item.availableAt = now + (item.cooldownMs || 0);
+
+  if (item.kind === "task") {
+    if (player.role === "crew" && room.status === "active") {
+      room.score += item.value || 1;
+    }
+
+    const taskName = item.label.toLowerCase();
+    return `${player.name} completed ${taskName}.`;
+  }
 
   if (item.kind === "boost") {
     player.speedBoostUntil = now + 5000;
@@ -354,9 +394,16 @@ function steerToward(source, targetX, targetY, speedMultiplier = 1) {
   source.vy = (dy / distance) * speedMultiplier;
 }
 
+function steerWithWobble(source, targetX, targetY, speedMultiplier, wobble = 0.12) {
+  const angle = Math.atan2(targetY - source.y, targetX - source.x);
+  const offset = (Math.sin(Date.now() / 500 + source.x * 0.01 + source.y * 0.01) * wobble);
+  source.vx = Math.cos(angle + offset) * speedMultiplier;
+  source.vy = Math.sin(angle + offset) * speedMultiplier;
+}
+
 function updateBotBrain(room, bot) {
   const modeConfig = getModeConfig(room.mode);
-  const botSpeed = modeConfig.pace * 0.9;
+  const botSpeed = modeConfig.pace * 0.6;
 
   if (!bot.alive) {
     bot.vx = 0;
@@ -370,27 +417,61 @@ function updateBotBrain(room, bot) {
     return;
   }
 
-  const nearestShard = room.shards.reduce(
-    (best, shard) => {
-      const dx = shard.x - bot.x;
-      const dy = shard.y - bot.y;
+  if (bot.role === "shadow") {
+    const nearestCrew = [...room.players.values()]
+      .filter((player) => player.role === "crew" && player.alive && !isBotPlayer(player))
+      .reduce((best, player) => {
+        const dx = player.x - bot.x;
+        const dy = player.y - bot.y;
+        const distance = dx * dx + dy * dy;
+        if (best === null || distance < best.distance) {
+          return { distance, player };
+        }
+        return best;
+      }, null);
+
+    if (nearestCrew && nearestCrew.distance < 260 * 260 && Math.random() > 0.3) {
+      steerWithWobble(bot, nearestCrew.player.x, nearestCrew.player.y, botSpeed * 1.1, 0.22);
+      return;
+    }
+
+    const wanderAngle = ((Date.now() / 650) + bot.x + bot.y) % (Math.PI * 2);
+    bot.vx = Math.cos(wanderAngle) * botSpeed * 0.75;
+    bot.vy = Math.sin(wanderAngle) * botSpeed * 0.75;
+    return;
+  }
+
+  const nearestTask = room.tasks.reduce(
+    (best, task) => {
+      if (Date.now() < task.availableAt) {
+        return best;
+      }
+
+      const dx = task.x - bot.x;
+      const dy = task.y - bot.y;
       const distance = dx * dx + dy * dy;
       if (best === null || distance < best.distance) {
-        return { distance, shard };
+        return { distance, task };
       }
       return best;
     },
     null,
   );
 
-  if (nearestShard) {
-    steerToward(bot, nearestShard.shard.x, nearestShard.shard.y, botSpeed);
+  if (nearestTask && nearestTask.distance < 420 * 420 && Math.random() > 0.45) {
+    steerWithWobble(bot, nearestTask.task.x, nearestTask.task.y, botSpeed * 0.85, 0.18);
     return;
   }
 
-  const wanderAngle = ((Date.now() / 500) + bot.x + bot.y) % (Math.PI * 2);
-  bot.vx = Math.cos(wanderAngle) * botSpeed;
-  bot.vy = Math.sin(wanderAngle) * botSpeed;
+  if (Math.random() > 0.5) {
+    bot.vx = 0;
+    bot.vy = 0;
+    return;
+  }
+
+  const wanderAngle = ((Date.now() / 520) + bot.x + bot.y) % (Math.PI * 2);
+  bot.vx = Math.cos(wanderAngle) * botSpeed * 0.7;
+  bot.vy = Math.sin(wanderAngle) * botSpeed * 0.7;
 }
 
 function roomSnapshot(room, requesterId) {
@@ -425,7 +506,7 @@ function roomSnapshot(room, requesterId) {
     botCount: desiredBotCount(room),
     minRecommended: ROOM_SIZE_MIN,
     maxAllowed: ROOM_SIZE_MAX,
-    scoreTarget: CREW_SCORE_TARGET,
+    taskTarget: TASK_TARGET,
     status: room.status,
     score: room.score,
     winner: room.winner,
@@ -434,7 +515,7 @@ function roomSnapshot(room, requesterId) {
     endsAt: room.endsAt,
     now: Date.now(),
     world: { width: WORLD_WIDTH, height: WORLD_HEIGHT },
-    shards: room.shards,
+    tasks: normalizeTasks(room.tasks),
     walls: normalizeWalls(room.walls),
     interactables: normalizeInteractables(room.interactables),
     chat: room.chat,
@@ -466,7 +547,7 @@ function resetLobby(room) {
   room.reason = "";
   room.startedAt = null;
   room.endsAt = null;
-  room.shards = [];
+  room.tasks = createTasks(getModeConfig(room.mode).taskCount);
   room.interactables = createInteractables();
   room.chat = room.chat.slice(-CHAT_LIMIT);
   syncBots(room);
@@ -510,7 +591,7 @@ function startRound(room) {
   room.reason = "";
   room.startedAt = Date.now();
   room.endsAt = room.startedAt + modeConfig.roundTimeMs;
-  room.shards = Array.from({ length: modeConfig.shardCount }, (_, i) => createShard(`s${i}`));
+  room.tasks = createTasks(modeConfig.taskCount);
 
   const shadowPlayer = pickShadowPlayer(room, players);
   players.forEach((player, i) => {
@@ -560,25 +641,29 @@ function startRound(room) {
         continue;
       }
 
-      for (let i = room.shards.length - 1; i >= 0; i -= 1) {
-        const shard = room.shards[i];
-        const dx = player.x - shard.x;
-        const dy = player.y - shard.y;
-        if (dx * dx + dy * dy <= 28 * 28) {
-          room.score += shard.value;
-          room.shards.splice(i, 1);
+      for (let i = room.tasks.length - 1; i >= 0; i -= 1) {
+        const task = room.tasks[i];
+        if (Date.now() < task.availableAt) {
+          continue;
+        }
+
+        const dx = player.x - task.x;
+        const dy = player.y - task.y;
+        if (dx * dx + dy * dy <= 32 * 32) {
+          room.score += task.value;
+          task.availableAt = now + task.cooldownMs;
         }
       }
     }
 
-    if (room.shards.length < modeConfig.shardCount) {
-      while (room.shards.length < modeConfig.shardCount) {
-        room.shards.push(createShard(`s${Date.now()}${Math.floor(Math.random() * 999)}`));
+    if (room.tasks.length < modeConfig.taskCount) {
+      while (room.tasks.length < modeConfig.taskCount) {
+        room.tasks.push(createTask(`t${Date.now()}${Math.floor(Math.random() * 999)}`, room.tasks.length));
       }
     }
 
-    if (room.score >= CREW_SCORE_TARGET) {
-      stopGame(room, "crew", "Crew secured enough shards.");
+    if (room.score >= TASK_TARGET) {
+      stopGame(room, "crew", "Crew completed enough tasks.");
       return;
     }
 
@@ -662,6 +747,7 @@ io.on("connection", (socket) => {
 
     room.mode = normalizeMode(mode);
     room.botCount = room.mode === "classic" ? 0 : normalizeBotCount(botCount, room.mode);
+    room.tasks = createTasks(getModeConfig(room.mode).taskCount);
     syncBots(room);
 
     socket.join(code);
@@ -707,6 +793,7 @@ io.on("connection", (socket) => {
 
     room.mode = normalizeMode(mode);
     room.botCount = room.mode === "classic" ? 0 : normalizeBotCount(botCount, room.mode);
+    room.tasks = createTasks(getModeConfig(room.mode).taskCount);
     syncBots(room);
     broadcastRoom(room);
   });

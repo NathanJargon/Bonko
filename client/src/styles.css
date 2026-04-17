@@ -48,6 +48,10 @@ input {
   padding: 18px 18px 112px;
 }
 
+.page.is-playing {
+  padding: 0;
+}
+
 .page::before {
   content: "";
   position: fixed;
@@ -112,6 +116,39 @@ input {
   margin: 0 auto;
   display: grid;
   gap: 16px;
+}
+
+.page.is-playing .game-shell {
+  width: 100vw;
+  max-width: none;
+  min-height: 100vh;
+  margin: 0;
+  padding: 12px;
+  gap: 10px;
+}
+
+.page.is-playing .masthead {
+  display: grid;
+  place-items: center;
+  text-align: center;
+  padding: 2px 6px;
+  min-height: 52px;
+}
+
+.page.is-playing .masthead > div {
+  width: 100%;
+}
+
+.page.is-playing .masthead .eyebrow,
+.page.is-playing .masthead .lede,
+.page.is-playing .masthead .masthead__stats {
+  display: none;
+}
+
+.page.is-playing .masthead h1 {
+  font-size: clamp(1.35rem, 2.6vw, 2rem);
+  line-height: 1;
+  letter-spacing: 0.04em;
 }
 
 .masthead {
@@ -437,6 +474,24 @@ button.ghost {
   align-items: start;
 }
 
+.page.is-playing .arena-grid {
+  min-height: calc(100vh - 82px);
+  align-items: stretch;
+}
+
+.page.is-playing .stage {
+  min-height: calc(100vh - 82px);
+}
+
+.page.is-playing .canvas-wrap {
+  display: grid;
+  gap: 12px;
+}
+
+.page.is-playing .canvas-wrap canvas {
+  height: calc(100vh - 248px);
+}
+
 .stage {
   display: grid;
   gap: 14px;
@@ -593,6 +648,24 @@ canvas {
   gap: 12px;
 }
 
+.page.is-playing .sidebar {
+  align-content: start;
+  max-height: calc(100vh - 82px);
+  overflow: auto;
+  padding-right: 2px;
+}
+
+.page.is-playing .chat-panel {
+  order: -1;
+  position: sticky;
+  top: 0;
+  z-index: 3;
+}
+
+.page.is-playing .chat-panel .chat-log {
+  max-height: min(40vh, 360px);
+}
+
 .mini-panel {
   display: grid;
   gap: 12px;
@@ -725,6 +798,14 @@ canvas {
   .masthead__stats,
   .status-grid {
     grid-template-columns: 1fr;
+  }
+
+  .page.is-playing .game-shell {
+    padding: 8px;
+  }
+
+  .page.is-playing .canvas-wrap canvas {
+    height: auto;
   }
 
   .stage__head,

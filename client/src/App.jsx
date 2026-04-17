@@ -21,14 +21,14 @@ const MODE_PRESETS = {
   },
   practice: {
     label: "Practice",
-    description: "Bots fill the room so you can drill movement and tagging.",
+    description: "Bots fill the room so you can drill movement, tasks, and tagging.",
     botCount: 4,
     paceLabel: "1.08x pace",
     tone: "training",
   },
   chaos: {
     label: "Chaos",
-    description: "Faster rounds, more shards, and more pressure.",
+    description: "Faster rounds, more tasks, and more pressure.",
     botCount: 6,
     paceLabel: "1.20x pace",
     tone: "wild",
@@ -111,6 +111,7 @@ export default function App() {
   const currentBotCount = snapshot?.botCount ?? draftBotCount;
   const modeTone = currentPreset.tone;
   const chatMessages = snapshot?.chat ?? [];
+  const isPlaying = joined && snapshot?.status === "active";
 
   const nearestInteractable = useMemo(() => {
     if (!snapshot || !me) {
@@ -118,7 +119,7 @@ export default function App() {
     }
 
     let nearest = null;
-    for (const item of snapshot.interactables ?? []) {
+    for (const item of [...(snapshot.tasks ?? []), ...(snapshot.interactables ?? [])]) {
       if (!item.available) {
         continue;
       }
@@ -176,6 +177,18 @@ export default function App() {
   }, [snapshot]);
 
   useEffect(() => {
+    const shouldFullscreen = joined && snapshot?.status === "active";
+
+    if (shouldFullscreen && !document.fullscreenElement && document.documentElement.requestFullscreen) {
+      document.documentElement.requestFullscreen().catch(() => {});
+    }
+
+    if (!shouldFullscreen && document.fullscreenElement) {
+      document.exitFullscreen().catch(() => {});
+    }
+  }, [joined, snapshot?.status]);
+
+  useEffect(() => {
     const keyDown = (event) => {
       const target = event.target;
       if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || target?.isContentEditable) {
@@ -217,23 +230,37 @@ export default function App() {
   }, [roomCode]);
 
   useEffect(() => {
-    const timer = setInterval(() => {
-      if (!joined || !snapshot || snapshot.status !== "active") {
+    let rafId = 0;
+
+    const tick = () => {
+      rafId = requestAnimationFrame(tick);
+
+      if (!joined || !roomCode || !snapshot || snapshot.status !== "active") {
+        if (moveRef.current.vx !== 0 || moveRef.current.vy !== 0) {
+          moveRef.current = { vx: 0, vy: 0 };
+          socket.emit("player:move", { roomCode, vx: 0, vy: 0 });
+        }
         return;
       }
 
-      const vx = Number(keysRef.current.right) - Number(keysRef.current.left);
-      const vy = Number(keysRef.current.down) - Number(keysRef.current.up);
+      const rawX = Number(keysRef.current.right) - Number(keysRef.current.left);
+      const rawY = Number(keysRef.current.down) - Number(keysRef.current.up);
+      const magnitude = Math.hypot(rawX, rawY);
+      const vx = magnitude > 0 ? rawX / magnitude : 0;
+      const vy = magnitude > 0 ? rawY / magnitude : 0;
+
       if (vx === moveRef.current.vx && vy === moveRef.current.vy) {
         return;
       }
 
       moveRef.current = { vx, vy };
       socket.emit("player:move", { roomCode, vx, vy });
-    }, 30);
+    };
 
-    return () => clearInterval(timer);
-  }, [joined, roomCode, snapshot]);
+    rafId = requestAnimationFrame(tick);
+
+    return () => cancelAnimationFrame(rafId);
+  }, [joined, roomCode, snapshot?.status]);
 
   useEffect(() => {
     let rafId = 0;
@@ -310,6 +337,25 @@ export default function App() {
         ctx.strokeRect(x, y, wall.w, wall.h);
       });
 
+      snapshot.tasks.forEach((item) => {
+        const active = item.available;
+        ctx.save();
+        ctx.translate(item.x, item.y);
+        ctx.rotate(Math.sin((Date.now() + item.x) * 0.002) * 0.18);
+        ctx.shadowBlur = active ? 20 : 0;
+        ctx.shadowColor = active ? "rgba(249,168,212,0.7)" : "transparent";
+        ctx.fillStyle = active ? "#f9a8d4" : "#334155";
+        ctx.strokeStyle = active ? "rgba(255,255,255,0.38)" : "rgba(255,255,255,0.16)";
+        ctx.lineWidth = 2;
+        ctx.fillRect(-16, -16, 32, 32);
+        ctx.strokeRect(-16, -16, 32, 32);
+        ctx.fillStyle = "#0f172a";
+        ctx.font = "700 11px Outfit";
+        ctx.textAlign = "center";
+        ctx.fillText(item.label.slice(0, 2).toUpperCase(), 0, 4);
+        ctx.restore();
+      });
+
       snapshot.interactables.forEach((item) => {
         const active = item.available;
         const pulse = 0.9 + Math.sin((Date.now() + item.x) * 0.01) * 0.08;
@@ -327,15 +373,6 @@ export default function App() {
         ctx.stroke();
       });
 
-      snapshot.shards.forEach((shard) => {
-        const pulse = 0.82 + Math.sin((Date.now() + shard.x) * 0.007) * 0.2;
-        ctx.beginPath();
-        ctx.fillStyle = "#8bffb8";
-        ctx.shadowBlur = 18;
-        ctx.shadowColor = "rgba(139,255,184,0.8)";
-        ctx.arc(shard.x, shard.y, shard.r * pulse, 0, Math.PI * 2);
-        ctx.fill();
-      });
       ctx.shadowBlur = 0;
 
       snapshot.players.forEach((player) => {
@@ -443,6 +480,10 @@ export default function App() {
   }
 
   function startRound() {
+    if (document.documentElement.requestFullscreen && !document.fullscreenElement) {
+      document.documentElement.requestFullscreen().catch(() => {});
+    }
+
     socket.emit("round:start", { roomCode });
   }
 
@@ -470,7 +511,7 @@ export default function App() {
   }
 
   const players = snapshot?.players ?? [];
-  const scoreTarget = snapshot?.scoreTarget ?? 28;
+  const taskTarget = snapshot?.taskTarget ?? 8;
   const remaining = snapshot?.endsAt
     ? Math.max(0, Math.ceil((snapshot.endsAt - (snapshot.now ?? Date.now())) / 1000))
     : 180;
@@ -478,10 +519,10 @@ export default function App() {
   const roomScore = snapshot?.score ?? 0;
 
   return (
-    <div className={`page tone-${modeTone}`}>
+    <div className={`page tone-${modeTone} ${isPlaying ? "is-playing" : ""}`}>
       <div className="ambient ambient-a" />
       <div className="ambient ambient-b" />
-      <main className="game-shell">
+      <main className={`game-shell ${isPlaying ? "is-playing" : ""}`}>
         <header className="masthead">
           <div>
             <p className="eyebrow">Arcade social chase</p>
@@ -602,7 +643,7 @@ export default function App() {
                 </div>
                 <div className="hud-strip">
                   <span>{players.length} players</span>
-                  <span>{roomScore}/{scoreTarget} shards</span>
+                  <span>{roomScore}/{taskTarget} tasks</span>
                   <span>{formatSeconds(remaining)}</span>
                 </div>
               </div>
@@ -699,7 +740,7 @@ export default function App() {
                       ? cooldown > 0
                         ? `Tag cooldown: ${cooldown}s`
                         : "Press Space to tag nearby crew."
-                      : "Collect shards, stay alive, and watch the shadow."}
+                        : "Complete tasks, stay alive, and watch the shadow."}
                   </p>
                 </section>
               )}
