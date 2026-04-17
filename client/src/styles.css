@@ -531,6 +531,59 @@ button.ghost {
   text-transform: uppercase;
 }
 
+.note-hud {
+  position: fixed;
+  left: 50%;
+  bottom: 96px;
+  transform: translateX(-50%);
+  z-index: 9;
+  width: min(520px, calc(100vw - 20px));
+  display: grid;
+  gap: 10px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  padding: 12px;
+  border: 1px solid rgba(249, 168, 212, 0.22);
+  border-radius: 20px;
+  background: rgba(6, 10, 18, 0.94);
+  backdrop-filter: blur(12px);
+  box-shadow: var(--shadow);
+}
+
+.note-hud__text {
+  display: grid;
+  gap: 6px;
+}
+
+.note-hud__text strong {
+  font-family: Fredoka, sans-serif;
+  font-size: 1.4rem;
+  letter-spacing: 0.18em;
+}
+
+.note-hud__text p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.88rem;
+}
+
+.note-hud__form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  min-width: min(310px, 100%);
+}
+
+.note-hud__form input {
+  min-width: 0;
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+}
+
+.note-hud__form button {
+  padding-inline: 16px;
+}
+
 .canvas-wrap {
   position: relative;
 }
@@ -861,5 +914,18 @@ canvas {
     right: 10px;
     transform: none;
     width: auto;
+  }
+
+  .note-hud {
+    left: 10px;
+    right: 10px;
+    bottom: 92px;
+    transform: none;
+    width: auto;
+    grid-template-columns: 1fr;
+  }
+
+  .note-hud__form {
+    min-width: 0;
   }
 }

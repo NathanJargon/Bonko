@@ -88,6 +88,7 @@ export default function App() {
   const [roomCode, setRoomCode] = useState("");
   const [snapshot, setSnapshot] = useState(null);
   const [chatInput, setChatInput] = useState("");
+  const [noteInput, setNoteInput] = useState("");
   const [showMenus, setShowMenus] = useState(true);
   const [draftMode, setDraftMode] = useState("practice");
   const [draftBotCount, setDraftBotCount] = useState(MODE_PRESETS.practice.botCount);
@@ -118,13 +119,39 @@ export default function App() {
   const shadowDashReady = Boolean(me?.isShadow) && (me?.shadowDashCooldownUntil ?? 0) <= (snapshot?.now ?? Date.now());
   const shadowMarkReady = Boolean(me?.isShadow) && (me?.shadowMarkCooldownUntil ?? 0) <= (snapshot?.now ?? Date.now());
 
+  const nearestNote = useMemo(() => {
+    if (!snapshot || !me) {
+      return null;
+    }
+
+    let nearest = null;
+    for (const item of snapshot.notes ?? snapshot.tasks ?? []) {
+      if (!item.available) {
+        continue;
+      }
+
+      const dx = me.x - item.x;
+      const dy = me.y - item.y;
+      const distance = Math.hypot(dx, dy);
+      if (distance > 64) {
+        continue;
+      }
+
+      if (!nearest || distance < nearest.distance) {
+        nearest = { item, distance };
+      }
+    }
+
+    return nearest?.item ?? null;
+  }, [snapshot, me]);
+
   const nearestInteractable = useMemo(() => {
     if (!snapshot || !me) {
       return null;
     }
 
     let nearest = null;
-    for (const item of [...(snapshot.notes ?? snapshot.tasks ?? []), ...(snapshot.interactables ?? [])]) {
+    for (const item of snapshot.interactables ?? []) {
       if (!item.available) {
         continue;
       }
@@ -189,6 +216,12 @@ export default function App() {
 
     setShowMenus(true);
   }, [snapshot?.status]);
+
+  useEffect(() => {
+    if (!nearestNote) {
+      setNoteInput("");
+    }
+  }, [nearestNote]);
 
   useEffect(() => {
     const shouldFullscreen = joined && snapshot?.status === "active";
@@ -533,6 +566,36 @@ export default function App() {
     socket.emit("round:reset", { roomCode });
   }
 
+  function leaveRoom() {
+    if (roomCode) {
+      socket.emit("room:leave");
+    }
+
+    setJoined(false);
+    setRoomCode("");
+    setSnapshot(null);
+    setChatInput("");
+    setShowMenus(true);
+    moveRef.current = { vx: 0, vy: 0 };
+    keysRef.current = { up: false, down: false, left: false, right: false };
+  }
+
+  function submitNote(event) {
+    event.preventDefault();
+
+    if (!roomCode || snapshot?.status !== "active" || !nearestNote) {
+      return;
+    }
+
+    socket.emit("note:submit", {
+      roomCode,
+      noteId: nearestNote.id,
+      code: noteInput,
+    });
+
+    setNoteInput("");
+  }
+
   function sendChat(event) {
     event.preventDefault();
     const text = chatInput.trim();
@@ -546,6 +609,10 @@ export default function App() {
 
   function handleInteract() {
     if (!roomCode || snapshot?.status === "lobby") {
+      return;
+    }
+
+    if (nearestNote) {
       return;
     }
 
@@ -673,6 +740,9 @@ export default function App() {
                       {overlaysVisible ? "Hide Menus" : "Show Menus"}
                     </button>
                   )}
+                  <button type="button" className="overlay-toggle" onClick={leaveRoom}>
+                    Back to Modes
+                  </button>
                 </div>
               </div>
 
@@ -687,7 +757,9 @@ export default function App() {
               </div>
             </section>
 
-            {overlaysVisible && <aside className="sidebar">
+            <aside className="sidebar">
+              {overlaysVisible && (
+                <>
               <section className="panel mini-panel pop-in">
                 <div className="panel__head">
                   <span className="panel__kicker">Match state</span>
@@ -807,6 +879,8 @@ export default function App() {
                   ))}
                 </ul>
               </section>
+                </>
+              )}
 
               <section className="panel mini-panel pop-in chat-panel">
                 <div className="panel__head">
@@ -837,7 +911,26 @@ export default function App() {
                   <button type="submit">Send</button>
                 </form>
               </section>
-            </aside>}
+            </aside>
+          </section>
+        )}
+
+        {joined && snapshot && nearestNote && (
+          <section className="note-hud pop-in">
+            <div className="note-hud__text">
+              <span className="panel__kicker">Hidden Note</span>
+              <strong>{nearestNote.code}</strong>
+              <p>Type the code exactly to decode it.</p>
+            </div>
+            <form className="note-hud__form" onSubmit={submitNote}>
+              <input
+                value={noteInput}
+                onChange={(event) => setNoteInput(event.target.value.toUpperCase())}
+                placeholder="Enter code"
+                maxLength={8}
+              />
+              <button type="submit">Decode</button>
+            </form>
           </section>
         )}
 
@@ -870,14 +963,14 @@ export default function App() {
             <div className="control-chip">
               <strong>Interact</strong>
               <span>E</span>
-              <p>{nearestInteractable ? nearestInteractable.label : "Move near a note, pad, or cache"}</p>
+              <p>{nearestInteractable ? nearestInteractable.label : nearestNote ? "Type the hidden note code" : "Move near a pad or cache"}</p>
             </div>
             <div className="control-chip accent">
               <strong>Chat</strong>
               <span>Enter</span>
               <p>Type below and send</p>
             </div>
-            <button type="button" className="control-action" onClick={handleInteract} disabled={!nearestInteractable || snapshot.status === "lobby"}>
+            <button type="button" className="control-action" onClick={handleInteract} disabled={!nearestInteractable || snapshot.status === "lobby" || Boolean(nearestNote)}>
               Use Nearby
             </button>
           </footer>

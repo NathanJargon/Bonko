@@ -133,22 +133,25 @@ function randomSpawn() {
   };
 }
 
+function randomNoteCode(length = 5) {
+  const chars = "ASDW";
+  let out = "";
+
+  for (let i = 0; i < length; i += 1) {
+    out += chars[Math.floor(Math.random() * chars.length)];
+  }
+
+  return out;
+}
+
 function createTask(id, index = 0) {
-  const taskPresets = [
-    { label: "Hidden Note", kind: "note" },
-    { label: "Hidden Note", kind: "note" },
-    { label: "Hidden Note", kind: "note" },
-    { label: "Hidden Note", kind: "note" },
-    { label: "Hidden Note", kind: "note" },
-    { label: "Hidden Note", kind: "note" },
-  ];
-  const preset = taskPresets[index % taskPresets.length];
   return {
     id,
     ...randomSpawn(),
     kind: "note",
-    label: preset.label,
-    taskKind: preset.kind,
+    label: "Hidden Note",
+    taskKind: "note",
+    code: randomNoteCode(5),
     r: 22,
     value: NOTE_VALUE,
     cooldownMs: NOTE_COOLDOWN_MS,
@@ -184,6 +187,10 @@ function createNoteMessage(player, note) {
   return `${player.name} found a hidden note.`;
 }
 
+function sanitizeNoteCode(code) {
+  return String(code || "").replace(/[^ASDW]/gi, "").toUpperCase().slice(0, 8);
+}
+
 function normalizeWalls(walls) {
   return walls.map((wall) => ({
     id: wall.id,
@@ -212,6 +219,7 @@ function normalizeTasks(tasks, now = Date.now()) {
     kind: task.kind,
     taskKind: task.taskKind,
     label: task.label,
+    code: task.code,
     x: task.x,
     y: task.y,
     r: task.r,
@@ -325,10 +333,6 @@ function applyInteractableEffect(room, player, item, now = Date.now()) {
   item.availableAt = now + (item.cooldownMs || 0);
 
   if (item.kind === "note") {
-    if (player.role === "crew" && room.status === "active") {
-      room.score += item.value || 1;
-    }
-
     return createNoteMessage(player, item);
   }
 
@@ -744,24 +748,6 @@ function startRound(room) {
       resolveWallCollision(player, room.walls);
       player.x = Math.max(20, Math.min(WORLD_WIDTH - 20, player.x));
       player.y = Math.max(20, Math.min(WORLD_HEIGHT - 20, player.y));
-
-      if (player.role !== "crew") {
-        continue;
-      }
-
-      for (let i = room.tasks.length - 1; i >= 0; i -= 1) {
-        const task = room.tasks[i];
-        if (Date.now() < task.availableAt) {
-          continue;
-        }
-
-        const dx = player.x - task.x;
-        const dy = player.y - task.y;
-        if (dx * dx + dy * dy <= 32 * 32) {
-          room.score += task.value;
-          task.availableAt = now + task.cooldownMs;
-        }
-      }
     }
 
     if (room.tasks.length < modeConfig.taskCount) {
@@ -922,6 +908,10 @@ io.on("connection", (socket) => {
     resetLobby(room);
   });
 
+  socket.on("room:leave", () => {
+    removePlayer(socket.id);
+  });
+
   socket.on("player:move", ({ roomCode, vx, vy }) => {
     const room = rooms.get(String(roomCode || "").toUpperCase());
     if (!room) {
@@ -970,6 +960,44 @@ io.on("connection", (socket) => {
     const now = Date.now();
     const message = applyInteractableEffect(room, player, item, now);
     room.chat.push(createChatEntry({ id: "system", name: "System" }, message));
+    room.chat = room.chat.slice(-CHAT_LIMIT);
+    broadcastRoom(room);
+  });
+
+  socket.on("note:submit", ({ roomCode, noteId, code }) => {
+    const room = rooms.get(String(roomCode || "").toUpperCase());
+    if (!room || room.status !== "active") {
+      return;
+    }
+
+    const player = room.players.get(socket.id);
+    if (!player || !player.alive) {
+      return;
+    }
+
+    const note = room.tasks.find((item) => item.id === noteId);
+    if (!note || Date.now() < note.availableAt) {
+      socket.emit("error:message", "That note is not available.");
+      return;
+    }
+
+    const dx = player.x - note.x;
+    const dy = player.y - note.y;
+    const distance = Math.hypot(dx, dy);
+    if (distance > INTERACT_RADIUS + note.r) {
+      socket.emit("error:message", "Move closer to the note.");
+      return;
+    }
+
+    const typed = sanitizeNoteCode(code);
+    if (typed !== note.code) {
+      socket.emit("error:message", "Wrong note code.");
+      return;
+    }
+
+    room.score += note.value;
+    note.availableAt = Date.now() + note.cooldownMs;
+    room.chat.push(createChatEntry({ id: "system", name: "System" }, `${player.name} decoded a hidden note.`));
     room.chat = room.chat.slice(-CHAT_LIMIT);
     broadcastRoom(room);
   });
