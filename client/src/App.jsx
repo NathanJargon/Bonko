@@ -663,7 +663,6 @@ export default function App() {
       <div className="ambient ambient-b" />
       <main className={`game-shell ${isPlaying ? "is-playing" : ""}`}>
         <header className="masthead">
-          <img className="site-logo" src={LOGO_URL} alt="Bonko logo" />
           <h1>Bonko</h1>
         </header>
 
