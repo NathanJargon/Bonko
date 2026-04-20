@@ -5,12 +5,12 @@ const { Server } = require("socket.io");
 
 const PORT = process.env.PORT || 3000;
 const ROOM_SIZE_MIN = 5;
-const ROOM_SIZE_MAX = 10;
-const WORLD_WIDTH = 2200;
-const WORLD_HEIGHT = 1400;
+const ROOM_SIZE_MAX = 14;
+const WORLD_WIDTH = 3200;
+const WORLD_HEIGHT = 2200;
 const ROUND_TIME_MS = 3 * 60 * 1000;
-const TICK_MS = 50;
-const PLAYER_SPEED = 410;
+const TICK_MS = 33;
+const PLAYER_SPEED = 360;
 const PLAYER_RADIUS = 20;
 const INTERACT_RADIUS = 42;
 const CHAT_LIMIT = 12;
@@ -136,6 +136,32 @@ function randomSpawn() {
   };
 }
 
+function pointHitsWall(x, y, walls, radius = PLAYER_RADIUS) {
+  for (const wall of walls) {
+    const left = wall.x - radius;
+    const right = wall.x + wall.w + radius;
+    const top = wall.y - radius;
+    const bottom = wall.y + wall.h + radius;
+
+    if (x >= left && x <= right && y >= top && y <= bottom) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+function randomSpawnInBounds(walls = []) {
+  for (let i = 0; i < 36; i += 1) {
+    const spawn = randomSpawn();
+    if (!pointHitsWall(spawn.x, spawn.y, walls)) {
+      return spawn;
+    }
+  }
+
+  return { x: 120, y: 120 };
+}
+
 function randomNoteCode(length = 5) {
   const chars = "ASDW";
   let out = "";
@@ -147,10 +173,11 @@ function randomNoteCode(length = 5) {
   return out;
 }
 
-function createTask(id, index = 0) {
+function createTask(id, index = 0, walls = []) {
+  const spawn = randomSpawnInBounds(walls);
   return {
     id,
-    ...randomSpawn(),
+    ...spawn,
     kind: "note",
     label: "Hidden Note",
     taskKind: "note",
@@ -164,24 +191,50 @@ function createTask(id, index = 0) {
 
 function createWalls() {
   return [
-    { id: "w1", x: 400, y: 250, w: 1220, h: 34 },
-    { id: "w2", x: 410, y: 1110, w: 1220, h: 34 },
-    { id: "w3", x: 510, y: 420, w: 34, h: 360 },
-    { id: "w4", x: 1656, y: 420, w: 34, h: 360 },
-    { id: "w5", x: 250, y: 720, w: 320, h: 34 },
-    { id: "w6", x: 1630, y: 720, w: 320, h: 34 },
+    // Outer maze frame with openings.
+    { id: "w1", x: 120, y: 120, w: 2960, h: 36 },
+    { id: "w2", x: 120, y: 2044, w: 2960, h: 36 },
+    { id: "w3", x: 120, y: 120, w: 36, h: 1960 },
+    { id: "w4", x: 3044, y: 120, w: 36, h: 1960 },
+    // Horizontal corridors.
+    { id: "w5", x: 260, y: 360, w: 1180, h: 34 },
+    { id: "w6", x: 1710, y: 360, w: 1180, h: 34 },
+    { id: "w7", x: 260, y: 720, w: 1780, h: 34 },
+    { id: "w8", x: 2240, y: 720, w: 650, h: 34 },
+    { id: "w9", x: 520, y: 1080, w: 1650, h: 34 },
+    { id: "w10", x: 2360, y: 1080, w: 530, h: 34 },
+    { id: "w11", x: 260, y: 1440, w: 1310, h: 34 },
+    { id: "w12", x: 1780, y: 1440, w: 1110, h: 34 },
+    { id: "w13", x: 260, y: 1780, w: 910, h: 34 },
+    { id: "w14", x: 1360, y: 1780, w: 1530, h: 34 },
+    // Vertical corridors and blockers.
+    { id: "w15", x: 520, y: 220, w: 34, h: 620 },
+    { id: "w16", x: 520, y: 980, w: 34, h: 980 },
+    { id: "w17", x: 900, y: 360, w: 34, h: 1220 },
+    { id: "w18", x: 1260, y: 220, w: 34, h: 1400 },
+    { id: "w19", x: 1620, y: 560, w: 34, h: 1320 },
+    { id: "w20", x: 1980, y: 220, w: 34, h: 1260 },
+    { id: "w21", x: 2360, y: 560, w: 34, h: 1400 },
+    { id: "w22", x: 2720, y: 220, w: 34, h: 1220 },
+    // Inner islands.
+    { id: "w23", x: 760, y: 540, w: 300, h: 220 },
+    { id: "w24", x: 1460, y: 880, w: 300, h: 220 },
+    { id: "w25", x: 2140, y: 1240, w: 300, h: 220 },
+    { id: "w26", x: 980, y: 1600, w: 300, h: 220 },
   ];
 }
 
 function createInteractables() {
   return [
-    { id: "i1", kind: "boost", label: "Boost Pad", x: 470, y: 950, r: 26, cooldownMs: 12000, availableAt: 0 },
-    { id: "i2", kind: "boost", label: "Boost Pad", x: 1730, y: 460, r: 26, cooldownMs: 12000, availableAt: 0 },
+    { id: "i1", kind: "boost", label: "Boost Pad", x: 360, y: 1720, r: 26, cooldownMs: 12000, availableAt: 0 },
+    { id: "i2", kind: "boost", label: "Boost Pad", x: 1030, y: 450, r: 26, cooldownMs: 12000, availableAt: 0 },
+    { id: "i3", kind: "boost", label: "Boost Pad", x: 1870, y: 1540, r: 26, cooldownMs: 12000, availableAt: 0 },
+    { id: "i4", kind: "boost", label: "Boost Pad", x: 2810, y: 520, r: 26, cooldownMs: 12000, availableAt: 0 },
   ];
 }
 
-function createTasks(count) {
-  return Array.from({ length: count }, (_, index) => createTask(`t${index}`, index));
+function createTasks(count, walls = []) {
+  return Array.from({ length: count }, (_, index) => createTask(`t${index}`, index, walls));
 }
 
 function createNoteMessage(player, note) {
@@ -365,6 +418,10 @@ function isBotPlayer(player) {
   return Boolean(player?.bot);
 }
 
+function isSpectatorPlayer(player) {
+  return Boolean(player?.spectator);
+}
+
 function createBot(room, index) {
   return {
     id: `bot-${room.code}-${index}-${randomId(3)}`,
@@ -412,12 +469,13 @@ function syncBots(room) {
 }
 
 function getHumanPlayers(room) {
-  return [...room.players.values()].filter((player) => !isBotPlayer(player));
+  return [...room.players.values()].filter((player) => !isBotPlayer(player) && !isSpectatorPlayer(player));
 }
 
 function pickShadowPlayer(room, players) {
-  const humanPlayers = players.filter((player) => !isBotPlayer(player));
-  const candidates = room.mode === "classic" || humanPlayers.length === 0 ? players : humanPlayers;
+  const participantPlayers = players.filter((player) => !isSpectatorPlayer(player));
+  const humanPlayers = participantPlayers.filter((player) => !isBotPlayer(player));
+  const candidates = room.mode === "classic" || humanPlayers.length === 0 ? participantPlayers : humanPlayers;
   return candidates[Math.floor(Math.random() * candidates.length)];
 }
 
@@ -520,7 +578,7 @@ function updateBotBrain(room, bot) {
     maybeUseShadowSkill(room, bot, Date.now());
 
     const nearestCrew = [...room.players.values()]
-      .filter((player) => player.role === "crew" && player.alive && !isBotPlayer(player))
+      .filter((player) => player.role === "crew" && player.alive && !isBotPlayer(player) && !isSpectatorPlayer(player))
       .reduce((best, player) => {
         const dx = player.x - bot.x;
         const dy = player.y - bot.y;
@@ -587,6 +645,7 @@ function roomSnapshot(room, requesterId) {
       alive: p.alive,
       isHost: p.id === room.hostId,
       isShadow: p.role === "shadow",
+      isSpectator: isSpectatorPlayer(p),
       cooldownUntil: p.cooldownUntil,
       speedBoostUntil: p.speedBoostUntil,
       ...normalizeShadowState(p, now),
@@ -652,19 +711,19 @@ function resetLobby(room) {
   room.reason = "";
   room.startedAt = null;
   room.endsAt = null;
-  room.tasks = createTasks(room.noteCount);
+  room.tasks = createTasks(room.noteCount, room.walls);
   room.interactables = createInteractables();
   room.chat = room.chat.slice(-CHAT_LIMIT);
   syncBots(room);
 
   for (const player of room.players.values()) {
-    const spawn = randomSpawn();
+    const spawn = randomSpawnInBounds(room.walls);
     player.x = spawn.x;
     player.y = spawn.y;
     player.vx = 0;
     player.vy = 0;
-    player.alive = true;
-    player.role = "crew";
+    player.alive = !isSpectatorPlayer(player);
+    player.role = isSpectatorPlayer(player) ? "spectator" : "crew";
     player.cooldownUntil = 0;
     player.speedBoostUntil = 0;
     player.stunnedUntil = 0;
@@ -696,18 +755,23 @@ function startRound(room) {
 
   const modeConfig = getModeConfig(room.mode);
   const players = [...room.players.values()];
+  const activePlayers = players.filter((player) => !isSpectatorPlayer(player));
+  if (activePlayers.length < 2) {
+    return;
+  }
   room.status = "active";
   room.score = 0;
   room.winner = null;
   room.reason = "";
   room.startedAt = Date.now();
   room.endsAt = room.startedAt + modeConfig.roundTimeMs;
-  room.tasks = createTasks(room.noteCount);
+  room.tasks = createTasks(room.noteCount, room.walls);
 
-  const shadowPlayer = pickShadowPlayer(room, players);
+  const shadowPlayer = pickShadowPlayer(room, activePlayers);
   players.forEach((player, i) => {
-    player.role = player === shadowPlayer ? "shadow" : "crew";
-    player.alive = true;
+    const spectator = isSpectatorPlayer(player);
+    player.role = spectator ? "spectator" : player === shadowPlayer ? "shadow" : "crew";
+    player.alive = !spectator;
     player.cooldownUntil = 0;
     player.speedBoostUntil = 0;
     player.stunnedUntil = 0;
@@ -716,7 +780,7 @@ function startRound(room) {
     player.shadowMarkCooldownUntil = 0;
     player.slowedUntil = 0;
     player.revealedUntil = 0;
-    const spawn = randomSpawn();
+    const spawn = randomSpawnInBounds(room.walls);
     player.x = spawn.x;
     player.y = spawn.y;
     player.vx = 0;
@@ -743,7 +807,7 @@ function startRound(room) {
     }
 
     for (const player of room.players.values()) {
-      if (!player.alive) {
+      if (!player.alive || isSpectatorPlayer(player)) {
         continue;
       }
 
@@ -760,7 +824,7 @@ function startRound(room) {
 
     if (room.tasks.length < room.noteCount) {
       while (room.tasks.length < room.noteCount) {
-        room.tasks.push(createTask(`t${Date.now()}${Math.floor(Math.random() * 999)}`, room.tasks.length));
+        room.tasks.push(createTask(`t${Date.now()}${Math.floor(Math.random() * 999)}`, room.tasks.length, room.walls));
       }
     }
 
@@ -828,21 +892,23 @@ function removePlayer(socketId) {
 }
 
 io.on("connection", (socket) => {
-  socket.on("room:create", ({ name, mode, botCount, noteCount }) => {
+  socket.on("room:create", ({ name, mode, botCount, noteCount, spectator }) => {
     const code = randomId();
     const room = makeRoom(code);
     rooms.set(code, room);
 
     room.hostId = socket.id;
-    const spawn = randomSpawn();
+    const spawn = randomSpawnInBounds(room.walls);
+    const isSpectator = Boolean(spectator);
     room.players.set(socket.id, {
       id: socket.id,
       name: sanitizeName(name),
       ...spawn,
       vx: 0,
       vy: 0,
-      role: "crew",
-      alive: true,
+      role: isSpectator ? "spectator" : "crew",
+      alive: !isSpectator,
+      spectator: isSpectator,
       cooldownUntil: 0,
       speedBoostUntil: 0,
       stunnedUntil: 0,
@@ -851,7 +917,7 @@ io.on("connection", (socket) => {
     room.mode = normalizeMode(mode);
     room.botCount = room.mode === "classic" ? 0 : normalizeBotCount(botCount, room.mode);
     room.noteCount = normalizeNoteCount(noteCount, room.mode);
-    room.tasks = createTasks(room.noteCount);
+    room.tasks = createTasks(room.noteCount, room.walls);
     syncBots(room);
 
     socket.join(code);
@@ -859,7 +925,7 @@ io.on("connection", (socket) => {
     broadcastRoom(room);
   });
 
-  socket.on("room:join", ({ code, name }) => {
+  socket.on("room:join", ({ code, name, spectator }) => {
     const room = rooms.get(String(code || "").toUpperCase());
     if (!room) {
       socket.emit("error:message", "Room not found.");
@@ -871,15 +937,17 @@ io.on("connection", (socket) => {
       return;
     }
 
-    const spawn = randomSpawn();
+    const spawn = randomSpawnInBounds(room.walls);
+    const isSpectator = Boolean(spectator);
     room.players.set(socket.id, {
       id: socket.id,
       name: sanitizeName(name),
       ...spawn,
       vx: 0,
       vy: 0,
-      role: "crew",
-      alive: true,
+      role: isSpectator ? "spectator" : "crew",
+      alive: !isSpectator,
+      spectator: isSpectator,
       cooldownUntil: 0,
       speedBoostUntil: 0,
       stunnedUntil: 0,
@@ -899,7 +967,7 @@ io.on("connection", (socket) => {
     room.mode = normalizeMode(mode);
     room.botCount = room.mode === "classic" ? 0 : normalizeBotCount(botCount, room.mode);
     room.noteCount = normalizeNoteCount(noteCount, room.mode);
-    room.tasks = createTasks(room.noteCount);
+    room.tasks = createTasks(room.noteCount, room.walls);
     syncBots(room);
     broadcastRoom(room);
   });
@@ -931,7 +999,7 @@ io.on("connection", (socket) => {
     }
 
     const player = room.players.get(socket.id);
-    if (!player || !player.alive) {
+    if (!player || !player.alive || isSpectatorPlayer(player)) {
       return;
     }
 
@@ -959,7 +1027,7 @@ io.on("connection", (socket) => {
     }
 
     const player = room.players.get(socket.id);
-    if (!player || !player.alive) {
+    if (!player || !player.alive || isSpectatorPlayer(player)) {
       return;
     }
 
@@ -983,7 +1051,7 @@ io.on("connection", (socket) => {
     }
 
     const player = room.players.get(socket.id);
-    if (!player || !player.alive) {
+    if (!player || !player.alive || isSpectatorPlayer(player)) {
       return;
     }
 

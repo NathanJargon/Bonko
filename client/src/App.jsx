@@ -12,6 +12,11 @@ const CANVAS_WIDTH = 980;
 const CANVAS_HEIGHT = 620;
 const LOGO_URL = "/logo.png";
 
+const VISUAL_THEMES = {
+  color: { label: "Color" },
+  mono: { label: "Black / White" },
+};
+
 const MODE_PRESETS = {
   classic: {
     label: "Classic",
@@ -54,6 +59,58 @@ function applyModeDefaults(mode) {
   return { mode: nextMode, botCount: nextBotCount, noteCount: nextNoteCount };
 }
 
+function getCanvasPalette(visualTheme) {
+  if (visualTheme === "mono") {
+    return {
+      bgStart: "#060606",
+      bgEnd: "#1d1d1d",
+      grid: "rgba(255,255,255,0.08)",
+      wallFill: "rgba(22,22,22,0.98)",
+      wallStroke: "rgba(255,255,255,0.28)",
+      noteActive: "#efefef",
+      noteInactive: "#505050",
+      noteStroke: "rgba(255,255,255,0.46)",
+      noteText: "#121212",
+      boost: "#fafafa",
+      neutral: "#525252",
+      me: "#ffffff",
+      bot: "#bcbcbc",
+      shadow: "#4b4b4b",
+      crew: "#d4d4d4",
+      dead: "#555555",
+      stunned: "#9e9e9e",
+      stunnedLabel: "#ffffff",
+      playerName: "#f8f8f8",
+      overlay: "rgba(10, 10, 10, 0.7)",
+      overlayText: "#f5f5f5",
+    };
+  }
+
+  return {
+    bgStart: "#07111f",
+    bgEnd: "#111a2d",
+    grid: "rgba(255,255,255,0.04)",
+    wallFill: "rgba(8, 13, 24, 0.96)",
+    wallStroke: "rgba(110, 231, 249, 0.2)",
+    noteActive: "#f9a8d4",
+    noteInactive: "#334155",
+    noteStroke: "rgba(255,255,255,0.38)",
+    noteText: "#0f172a",
+    boost: "#8bffb8",
+    neutral: "#334155",
+    me: "#fbbf24",
+    bot: "#34d399",
+    shadow: "#fb7185",
+    crew: "#60a5fa",
+    dead: "#4b5563",
+    stunned: "#f97316",
+    stunnedLabel: "#fdba74",
+    playerName: "#f8fafc",
+    overlay: "rgba(2, 6, 23, 0.6)",
+    overlayText: "#e2e8f0",
+  };
+}
+
 function ModeCard({ mode, preset, selected, onSelect }) {
   return (
     <button className={`mode-card ${selected ? "selected" : ""}`} onClick={() => onSelect(mode)} type="button">
@@ -70,9 +127,12 @@ function PlayerRow({ player, isYou }) {
       <span className="roster-row__name">
         {player.name}
         {player.bot && <em>BOT</em>}
+        {player.isSpectator && <em>SPEC</em>}
         {player.isHost && <em>HOST</em>}
       </span>
-      <span className="roster-row__state">{player.alive ? (player.bot ? "AI" : "Live") : "Out"}</span>
+      <span className="roster-row__state">
+        {player.isSpectator ? "Spectating" : player.alive ? (player.bot ? "AI" : "Live") : "Out"}
+      </span>
     </li>
   );
 }
@@ -87,9 +147,12 @@ export default function App() {
   const [chatInput, setChatInput] = useState("");
   const [noteInput, setNoteInput] = useState("");
   const [showMenus, setShowMenus] = useState(true);
+  const [joinAsSpectator, setJoinAsSpectator] = useState(false);
+  const [visualTheme, setVisualTheme] = useState("color");
   const [draftMode, setDraftMode] = useState("practice");
   const [draftBotCount, setDraftBotCount] = useState(MODE_PRESETS.practice.botCount);
   const [draftNoteCount, setDraftNoteCount] = useState(MODE_PRESETS.practice.noteCount);
+  const [spectateTargetId, setSpectateTargetId] = useState(null);
 
   const canvasRef = useRef(null);
   const keysRef = useRef({ up: false, down: false, left: false, right: false });
@@ -105,6 +168,7 @@ export default function App() {
   }, [snapshot]);
 
   const isHost = Boolean(me?.isHost);
+  const isSpectator = Boolean(me?.isSpectator);
   const canEditLobby = joined && isHost && snapshot?.status === "lobby";
   const currentMode = snapshot?.mode ?? draftMode;
   const currentPreset = MODE_PRESETS[currentMode] ?? MODE_PRESETS.classic;
@@ -114,6 +178,7 @@ export default function App() {
   const chatMessages = snapshot?.chat ?? [];
   const isPlaying = joined && snapshot?.status === "active";
   const overlaysVisible = !isPlaying || showMenus;
+  const canvasPalette = useMemo(() => getCanvasPalette(visualTheme), [visualTheme]);
   const noteTarget = snapshot?.noteTarget ?? snapshot?.taskTarget ?? 8;
   const shadowDashReady = Boolean(me?.isShadow) && (me?.shadowDashCooldownUntil ?? 0) <= (snapshot?.now ?? Date.now());
   const shadowMarkReady = Boolean(me?.isShadow) && (me?.shadowMarkCooldownUntil ?? 0) <= (snapshot?.now ?? Date.now());
@@ -170,6 +235,27 @@ export default function App() {
     return nearest?.item ?? null;
   }, [snapshot, me]);
 
+  const spectatablePlayers = useMemo(() => {
+    if (!snapshot) {
+      return [];
+    }
+
+    return snapshot.players.filter((player) => !player.isSpectator && player.alive);
+  }, [snapshot]);
+
+  const spectateTarget = useMemo(() => {
+    if (!isSpectator) {
+      return null;
+    }
+
+    const byId = spectatablePlayers.find((player) => player.id === spectateTargetId);
+    if (byId) {
+      return byId;
+    }
+
+    return spectatablePlayers[0] ?? null;
+  }, [isSpectator, spectatablePlayers, spectateTargetId]);
+
   useEffect(() => {
     const onJoined = ({ room }) => {
       setJoined(true);
@@ -224,6 +310,21 @@ export default function App() {
   }, [nearestNote]);
 
   useEffect(() => {
+    if (!isSpectator) {
+      return;
+    }
+
+    if (spectatablePlayers.length === 0) {
+      setSpectateTargetId(null);
+      return;
+    }
+
+    if (!spectatablePlayers.some((player) => player.id === spectateTargetId)) {
+      setSpectateTargetId(spectatablePlayers[0].id);
+    }
+  }, [isSpectator, spectatablePlayers, spectateTargetId]);
+
+  useEffect(() => {
     const shouldFullscreen = joined && snapshot?.status === "active";
 
     if (shouldFullscreen && !document.fullscreenElement && document.documentElement.requestFullscreen) {
@@ -261,6 +362,9 @@ export default function App() {
       }
 
       if ((key === " " || key === "space") && roomCode) {
+        if (isSpectator) {
+          return;
+        }
         event.preventDefault();
         socket.emit("player:tag", { roomCode });
       }
@@ -281,8 +385,18 @@ export default function App() {
       }
 
       if (key === "e" && roomCode && snapshot?.status !== "lobby") {
+        if (isSpectator) {
+          return;
+        }
         event.preventDefault();
         socket.emit("player:interact", { roomCode });
+      }
+
+      if (isSpectator && key === "tab" && spectatablePlayers.length > 0) {
+        event.preventDefault();
+        const index = spectatablePlayers.findIndex((player) => player.id === spectateTargetId);
+        const nextIndex = index < 0 ? 0 : (index + 1) % spectatablePlayers.length;
+        setSpectateTargetId(spectatablePlayers[nextIndex].id);
       }
     };
 
@@ -301,7 +415,7 @@ export default function App() {
       window.removeEventListener("keydown", keyDown);
       window.removeEventListener("keyup", keyUp);
     };
-  }, [roomCode, me?.isShadow, snapshot?.status, nearestNote]);
+  }, [roomCode, me?.isShadow, snapshot?.status, nearestNote, isSpectator, spectatablePlayers, spectateTargetId]);
 
   useEffect(() => {
     let rafId = 0;
@@ -317,16 +431,24 @@ export default function App() {
         return;
       }
 
+      if (isSpectator) {
+        if (moveRef.current.vx !== 0 || moveRef.current.vy !== 0) {
+          moveRef.current = { vx: 0, vy: 0 };
+          socket.emit("player:move", { roomCode, vx: 0, vy: 0 });
+        }
+        return;
+      }
+
       const rawX = Number(keysRef.current.right) - Number(keysRef.current.left);
       const rawY = Number(keysRef.current.down) - Number(keysRef.current.up);
       const magnitude = Math.hypot(rawX, rawY);
       const targetVx = magnitude > 0 ? rawX / magnitude : 0;
       const targetVy = magnitude > 0 ? rawY / magnitude : 0;
-      const easing = magnitude === 0 ? 1 : 0.55;
+      const easing = magnitude === 0 ? 0.18 : 0.28;
       const vx = moveRef.current.vx + (targetVx - moveRef.current.vx) * easing;
       const vy = moveRef.current.vy + (targetVy - moveRef.current.vy) * easing;
 
-      if (Math.abs(vx - moveRef.current.vx) < 0.01 && Math.abs(vy - moveRef.current.vy) < 0.01) {
+      if (Math.abs(vx - moveRef.current.vx) < 0.003 && Math.abs(vy - moveRef.current.vy) < 0.003) {
         return;
       }
 
@@ -337,7 +459,7 @@ export default function App() {
     rafId = requestAnimationFrame(tick);
 
     return () => cancelAnimationFrame(rafId);
-  }, [joined, roomCode, snapshot?.status]);
+  }, [joined, roomCode, snapshot?.status, isSpectator]);
 
   useEffect(() => {
     let rafId = 0;
@@ -381,22 +503,27 @@ export default function App() {
         }
       }
 
-      const meRender = tracked.get(me.id) || me;
-      const cameraX = clamp(meRender.x - CANVAS_WIDTH / 2, 0, world.width - CANVAS_WIDTH);
-      const cameraY = clamp(meRender.y - CANVAS_HEIGHT / 2, 0, world.height - CANVAS_HEIGHT);
+      const cameraFocus = isSpectator ? spectateTarget : me;
+      if (!cameraFocus) {
+        return;
+      }
+
+      const focusRender = tracked.get(cameraFocus.id) || cameraFocus;
+      const cameraX = clamp(focusRender.x - CANVAS_WIDTH / 2, 0, world.width - CANVAS_WIDTH);
+      const cameraY = clamp(focusRender.y - CANVAS_HEIGHT / 2, 0, world.height - CANVAS_HEIGHT);
 
       ctx.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
 
       const bg = ctx.createLinearGradient(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
-      bg.addColorStop(0, "#07111f");
-      bg.addColorStop(1, "#111a2d");
+      bg.addColorStop(0, canvasPalette.bgStart);
+      bg.addColorStop(1, canvasPalette.bgEnd);
       ctx.fillStyle = bg;
       ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
 
       ctx.save();
       ctx.translate(-cameraX, -cameraY);
 
-      ctx.strokeStyle = "rgba(255,255,255,0.04)";
+      ctx.strokeStyle = canvasPalette.grid;
       for (let x = 0; x <= world.width; x += 80) {
         ctx.beginPath();
         ctx.moveTo(x, 0);
@@ -413,8 +540,8 @@ export default function App() {
       snapshot.walls.forEach((wall) => {
         const x = wall.x;
         const y = wall.y;
-        ctx.fillStyle = "rgba(8, 13, 24, 0.96)";
-        ctx.strokeStyle = "rgba(110, 231, 249, 0.2)";
+        ctx.fillStyle = canvasPalette.wallFill;
+        ctx.strokeStyle = canvasPalette.wallStroke;
         ctx.lineWidth = 2;
         ctx.fillRect(x, y, wall.w, wall.h);
         ctx.strokeRect(x, y, wall.w, wall.h);
@@ -427,12 +554,12 @@ export default function App() {
         ctx.rotate(Math.sin((Date.now() + item.x) * 0.002) * 0.18);
         ctx.shadowBlur = active ? 20 : 0;
         ctx.shadowColor = active ? "rgba(249,168,212,0.7)" : "transparent";
-        ctx.fillStyle = active ? "#f9a8d4" : "#334155";
-        ctx.strokeStyle = active ? "rgba(255,255,255,0.38)" : "rgba(255,255,255,0.16)";
+        ctx.fillStyle = active ? canvasPalette.noteActive : canvasPalette.noteInactive;
+        ctx.strokeStyle = active ? canvasPalette.noteStroke : "rgba(255,255,255,0.16)";
         ctx.lineWidth = 2;
         ctx.fillRect(-16, -16, 32, 32);
         ctx.strokeRect(-16, -16, 32, 32);
-        ctx.fillStyle = "#0f172a";
+        ctx.fillStyle = canvasPalette.noteText;
         ctx.font = "700 11px Outfit";
         ctx.textAlign = "center";
         ctx.fillText("N", 0, 4);
@@ -444,7 +571,7 @@ export default function App() {
         const pulse = 0.9 + Math.sin((Date.now() + item.x) * 0.01) * 0.08;
         const radius = item.r * pulse;
         ctx.beginPath();
-        ctx.fillStyle = active ? (item.kind === "boost" ? "#8bffb8" : "#f9a8d4") : "#334155";
+        ctx.fillStyle = active ? (item.kind === "boost" ? canvasPalette.boost : canvasPalette.noteActive) : canvasPalette.neutral;
         ctx.shadowBlur = active ? 18 : 0;
         ctx.shadowColor = active ? (item.kind === "boost" ? "rgba(139,255,184,0.8)" : "rgba(249,168,212,0.8)") : "transparent";
         ctx.arc(item.x, item.y, radius, 0, Math.PI * 2);
@@ -461,17 +588,17 @@ export default function App() {
       snapshot.players.forEach((player) => {
         const draw = tracked.get(player.id) || player;
         if (!player.alive) {
-          ctx.fillStyle = "#4b5563";
+          ctx.fillStyle = canvasPalette.dead;
         } else if ((player.stunnedUntil ?? 0) > (snapshot.now ?? Date.now())) {
-          ctx.fillStyle = "#f97316";
+          ctx.fillStyle = canvasPalette.stunned;
         } else if (player.id === me.id) {
-          ctx.fillStyle = "#fbbf24";
+          ctx.fillStyle = canvasPalette.me;
         } else if (player.bot) {
-          ctx.fillStyle = "#34d399";
+          ctx.fillStyle = canvasPalette.bot;
         } else if (player.isShadow && player.roleKnown) {
-          ctx.fillStyle = "#fb7185";
+          ctx.fillStyle = canvasPalette.shadow;
         } else {
-          ctx.fillStyle = "#60a5fa";
+          ctx.fillStyle = canvasPalette.crew;
         }
 
         ctx.beginPath();
@@ -484,13 +611,13 @@ export default function App() {
           ctx.stroke();
         }
 
-        ctx.fillStyle = "#f8fafc";
+        ctx.fillStyle = canvasPalette.playerName;
         ctx.font = "600 12px Outfit";
         ctx.textAlign = "center";
         ctx.fillText(player.name, draw.x, draw.y - 28);
 
         if ((player.stunnedUntil ?? 0) > (snapshot.now ?? Date.now())) {
-          ctx.fillStyle = "#fdba74";
+          ctx.fillStyle = canvasPalette.stunnedLabel;
           ctx.font = "700 10px Outfit";
           ctx.fillText("STUNNED", draw.x, draw.y + 34);
         }
@@ -499,18 +626,39 @@ export default function App() {
       ctx.restore();
 
       if (!me.alive && snapshot.status === "active") {
-        ctx.fillStyle = "rgba(2, 6, 23, 0.6)";
+        ctx.fillStyle = canvasPalette.overlay;
         ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
-        ctx.fillStyle = "#e2e8f0";
+        ctx.fillStyle = canvasPalette.overlayText;
         ctx.font = "700 40px Fredoka";
         ctx.textAlign = "center";
         ctx.fillText("Bonked Out", CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2);
+      }
+
+      if (isSpectator) {
+        ctx.fillStyle = "rgba(0, 0, 0, 0.25)";
+        ctx.fillRect(14, 14, 320, 58);
+        ctx.fillStyle = "#f8fafc";
+        ctx.font = "700 12px Outfit";
+        ctx.textAlign = "left";
+        ctx.fillText("SPECTATOR MODE", 26, 38);
+        ctx.font = "600 13px Outfit";
+        ctx.fillText(spectateTarget ? `Watching: ${spectateTarget.name}` : "No active players to watch", 26, 58);
       }
     };
 
     rafId = requestAnimationFrame(renderFrame);
     return () => cancelAnimationFrame(rafId);
-  }, [snapshot, me]);
+  }, [snapshot, me, isSpectator, spectateTarget, canvasPalette]);
+
+  function cycleSpectateTarget() {
+    if (spectatablePlayers.length === 0) {
+      return;
+    }
+
+    const index = spectatablePlayers.findIndex((player) => player.id === spectateTargetId);
+    const nextIndex = index < 0 ? 0 : (index + 1) % spectatablePlayers.length;
+    setSpectateTargetId(spectatablePlayers[nextIndex].id);
+  }
 
   function selectMode(nextMode) {
     const next = applyModeDefaults(nextMode);
@@ -576,6 +724,7 @@ export default function App() {
         mode: draftMode,
         botCount: draftMode === "classic" ? 0 : draftBotCount,
         noteCount: draftNoteCount,
+        spectator: joinAsSpectator,
       });
       return;
     }
@@ -585,7 +734,7 @@ export default function App() {
       return;
     }
 
-    socket.emit("room:join", { code: safeCode, name: safeName });
+    socket.emit("room:join", { code: safeCode, name: safeName, spectator: joinAsSpectator });
   }
 
   function startRound() {
@@ -642,7 +791,7 @@ export default function App() {
   }
 
   function handleInteract() {
-    if (!roomCode || snapshot?.status === "lobby" || nearestNote) {
+    if (!roomCode || snapshot?.status === "lobby" || nearestNote || isSpectator) {
       return;
     }
 
@@ -658,12 +807,24 @@ export default function App() {
   const roomScore = snapshot?.score ?? 0;
 
   return (
-    <div className={`page tone-${modeTone} ${isPlaying ? "is-playing" : ""}`}>
+    <div className={`page tone-${modeTone} theme-${visualTheme} ${isPlaying ? "is-playing" : ""}`}>
       <div className="ambient ambient-a" />
       <div className="ambient ambient-b" />
       <main className={`game-shell ${isPlaying ? "is-playing" : ""}`}>
         <header className="masthead">
           <h1>Bonko</h1>
+          <div className="theme-switch" role="group" aria-label="Visual theme">
+            {Object.entries(VISUAL_THEMES).map(([theme, meta]) => (
+              <button
+                key={theme}
+                type="button"
+                className={`mode-chip ${visualTheme === theme ? "selected" : ""}`}
+                onClick={() => setVisualTheme(theme)}
+              >
+                {meta.label}
+              </button>
+            ))}
+          </div>
         </header>
 
         {!joined && (
@@ -701,6 +862,9 @@ export default function App() {
                 <button onClick={() => connectRoom(true)}>Create {MODE_PRESETS[draftMode].label} Room</button>
                 <button className="ghost" onClick={() => connectRoom(false)}>
                   Join Room
+                </button>
+                <button type="button" className="overlay-toggle" onClick={() => setJoinAsSpectator((value) => !value)}>
+                  {joinAsSpectator ? "Joining as Spectator" : "Joining as Player"}
                 </button>
               </div>
 
@@ -782,6 +946,7 @@ export default function App() {
                   <span>{players.length} players</span>
                   <span>{roomScore}/{noteTarget} notes</span>
                   <span>{formatSeconds(remaining)}</span>
+                  {isSpectator && <span>Spectator</span>}
                   {isPlaying && (
                     <button type="button" className="overlay-toggle" onClick={() => setShowMenus((visible) => !visible)}>
                       {overlaysVisible ? "Hide Menus" : "Show Menus"}
@@ -799,6 +964,7 @@ export default function App() {
                   <span>Move: WASD / Arrows</span>
                   <span>Tag: Space</span>
                   <span>Interact: E</span>
+                  {isSpectator && <span>Cycle View: Tab</span>}
                   <span>{snapshot.pace.toFixed(2)}x pace</span>
                 </div>
               </div>
@@ -900,10 +1066,12 @@ export default function App() {
                 <section className="panel mini-panel pop-in">
                   <div className="panel__head">
                     <span className="panel__kicker">Role briefing</span>
-                    <h3>{me?.isShadow ? "You are Shadow" : "You are Crew"}</h3>
+                    <h3>{isSpectator ? "You are Spectating" : me?.isShadow ? "You are Shadow" : "You are Crew"}</h3>
                   </div>
                   <p className="muted">
-                    {stunRemaining > 0
+                    {isSpectator
+                      ? "You can watch live players. Press Tab or use the button below to switch camera targets."
+                      : stunRemaining > 0
                       ? `Stunned (${stunRemaining}s)`
                       : me?.isShadow
                       ? cooldown > 0
@@ -911,6 +1079,11 @@ export default function App() {
                           : "Press Space to tag nearby crew. Q marks a target, Shift dashes."
                       : "Collect hidden notes, stay alive, and watch the shadow."}
                   </p>
+                  {isSpectator && (
+                    <button type="button" onClick={cycleSpectateTarget} disabled={spectatablePlayers.length < 2}>
+                      Next Player Camera
+                    </button>
+                  )}
                   {me?.isShadow && (
                     <div className="shadow-skill-grid">
                       <div>

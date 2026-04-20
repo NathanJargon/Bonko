@@ -36,6 +36,20 @@ body {
     linear-gradient(160deg, #04060b 0%, #07101c 50%, #0c1528 100%);
 }
 
+.theme-mono {
+  --accent: #ffffff;
+  --accent-2: #d4d4d4;
+  --accent-3: #a3a3a3;
+  --muted: #bdbdbd;
+}
+
+.page.theme-mono {
+  background:
+    radial-gradient(circle at top left, rgba(255, 255, 255, 0.08), transparent 36%),
+    radial-gradient(circle at 82% 16%, rgba(196, 196, 196, 0.1), transparent 30%),
+    linear-gradient(160deg, #050505 0%, #0e0e0e 54%, #161616 100%);
+}
+
 button,
 input {
   font: inherit;
@@ -44,7 +58,8 @@ input {
 .page {
   position: relative;
   min-height: 100vh;
-  overflow: hidden;
+  overflow-x: hidden;
+  overflow-y: auto;
   padding: 18px 18px 112px;
 }
 
@@ -109,6 +124,25 @@ input {
   animation: drift-b 20s ease-in-out infinite alternate;
 }
 
+.page.theme-mono .ambient-a {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.page.theme-mono .ambient-b {
+  background: rgba(185, 185, 185, 0.12);
+}
+
+.page.theme-mono .panel,
+.page.theme-mono .mode-card,
+.page.theme-mono .mode-chip,
+.page.theme-mono .setting-row,
+.page.theme-mono .control-chip,
+.page.theme-mono .chat-line,
+.page.theme-mono .status-grid div,
+.page.theme-mono .roster-row {
+  background: rgba(18, 18, 18, 0.92);
+}
+
 .game-shell {
   position: relative;
   z-index: 2;
@@ -162,6 +196,16 @@ input {
   place-items: center;
   text-align: center;
   padding: 6px 2px 4px;
+  gap: 8px;
+}
+
+.theme-switch {
+  display: inline-flex;
+  gap: 8px;
+}
+
+.theme-switch .mode-chip {
+  min-width: 128px;
 }
 
 .site-logo {
@@ -483,9 +527,9 @@ button.ghost {
 
 .arena-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1.55fr) minmax(300px, 0.78fr);
+  grid-template-columns: minmax(0, 1fr);
   gap: 16px;
-  align-items: start;
+  align-items: center;
 }
 
 .page.is-playing .arena-grid {
@@ -509,6 +553,8 @@ button.ghost {
 .stage {
   display: grid;
   gap: 14px;
+  width: min(1040px, 100%);
+  margin: 0 auto;
 }
 
 .stage__head {
@@ -666,12 +712,10 @@ canvas {
 }
 
 .control-bar {
-  position: fixed;
-  left: 50%;
-  bottom: 14px;
-  transform: translateX(-50%);
-  z-index: 8;
-  width: min(1280px, calc(100vw - 20px));
+  position: static;
+  z-index: 2;
+  width: min(1040px, 100%);
+  margin: 4px auto 0;
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
   gap: 10px;
@@ -750,20 +794,20 @@ canvas {
 .sidebar {
   display: grid;
   gap: 12px;
+  width: min(1040px, 100%);
+  margin: 0 auto;
 }
 
 .page.is-playing .sidebar {
   align-content: start;
-  max-height: calc(100vh - 82px);
-  overflow: auto;
-  padding-right: 2px;
+  max-height: none;
+  overflow: visible;
+  padding-right: 0;
 }
 
 .page.is-playing .chat-panel {
-  order: -1;
-  position: sticky;
-  top: 0;
-  z-index: 3;
+  order: 2;
+  position: static;
 }
 
 .page.is-playing .chat-panel .chat-log {
@@ -925,10 +969,8 @@ canvas {
 
   .control-bar {
     grid-template-columns: 1fr 1fr;
-    left: 10px;
-    right: 10px;
-    transform: none;
     width: auto;
+    margin: 0;
   }
 
   .note-hud {
