@@ -147,6 +147,52 @@ input {
   background: rgba(255, 255, 255, 0.94);
 }
 
+.page.theme-light .panel__kicker,
+.page.theme-light .muted,
+.page.theme-light .mode-card p,
+.page.theme-light .setting-row p,
+.page.theme-light .note-hud__text p,
+.page.theme-light .chat-line span,
+.page.theme-light .control-chip p,
+.page.theme-light .roster-row__name em {
+  color: #334155;
+}
+
+.page.theme-light .hud-strip span,
+.page.theme-light .canvas-legend span,
+.page.theme-light .status-grid span,
+.page.theme-light .roster-row__state {
+  background: rgba(15, 23, 42, 0.08);
+  color: #1e293b;
+  border: 1px solid rgba(15, 23, 42, 0.14);
+}
+
+.page.theme-light .overlay-toggle {
+  border-color: rgba(15, 23, 42, 0.22);
+  background: rgba(255, 255, 255, 0.96);
+  color: #0f172a;
+}
+
+.page.theme-light .note-hud {
+  border-color: rgba(15, 23, 42, 0.2);
+  background: rgba(255, 255, 255, 0.96);
+}
+
+.page.theme-light .note-hud__text strong {
+  color: #0f172a;
+}
+
+.page.theme-light input {
+  background: rgba(255, 255, 255, 0.96);
+  color: #0f172a;
+  border-color: rgba(15, 23, 42, 0.22);
+}
+
+.page.theme-light canvas {
+  border-color: rgba(15, 23, 42, 0.22);
+  box-shadow: 0 12px 36px rgba(15, 23, 42, 0.14);
+}
+
 .game-shell {
   position: relative;
   z-index: 2;

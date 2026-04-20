@@ -631,9 +631,9 @@ export default function App() {
       }
 
       if (isSpectating) {
-        ctx.fillStyle = "rgba(0, 0, 0, 0.25)";
+        ctx.fillStyle = visualTheme === "light" ? "rgba(15, 23, 42, 0.08)" : "rgba(0, 0, 0, 0.25)";
         ctx.fillRect(14, 14, 320, 58);
-        ctx.fillStyle = "#f8fafc";
+        ctx.fillStyle = canvasPalette.overlayText;
         ctx.font = "700 12px Outfit";
         ctx.textAlign = "left";
         ctx.fillText("SPECTATOR MODE", 26, 38);
@@ -644,7 +644,7 @@ export default function App() {
 
     rafId = requestAnimationFrame(renderFrame);
     return () => cancelAnimationFrame(rafId);
-  }, [snapshot, me, isSpectating, isBonkedOut, spectateTarget, canvasPalette]);
+  }, [snapshot, me, isSpectating, isBonkedOut, spectateTarget, canvasPalette, visualTheme]);
 
   function toggleVisualTheme() {
     setVisualTheme((current) => (current === "dark" ? "light" : "dark"));
