@@ -135,6 +135,8 @@ function PlayerRow({ player, isYou }) {
 export default function App() {
   const [name, setName] = useState(randomPilotName);
   const [roomInput, setRoomInput] = useState("");
+  const [availableLobbies, setAvailableLobbies] = useState([]);
+  const [isRefreshingLobbies, setIsRefreshingLobbies] = useState(false);
   const [menuError, setMenuError] = useState("");
   const [joined, setJoined] = useState(false);
   const [roomCode, setRoomCode] = useState("");
@@ -268,16 +270,40 @@ export default function App() {
       setMenuError(String(message || "Unknown error"));
     };
 
+    const onLobbyList = ({ lobbies }) => {
+      setAvailableLobbies(Array.isArray(lobbies) ? lobbies : []);
+      setIsRefreshingLobbies(false);
+    };
+
     socket.on("room:joined", onJoined);
     socket.on("room:update", onUpdate);
     socket.on("error:message", onError);
+    socket.on("room:list", onLobbyList);
 
     return () => {
       socket.off("room:joined", onJoined);
       socket.off("room:update", onUpdate);
       socket.off("error:message", onError);
+      socket.off("room:list", onLobbyList);
     };
   }, []);
+
+  useEffect(() => {
+    if (joined) {
+      return;
+    }
+
+    setIsRefreshingLobbies(true);
+    socket.emit("room:list");
+
+    const interval = window.setInterval(() => {
+      socket.emit("room:list");
+    }, 5000);
+
+    return () => {
+      window.clearInterval(interval);
+    };
+  }, [joined]);
 
   useEffect(() => {
     if (!snapshot || snapshot.status !== "lobby") {
@@ -736,6 +762,32 @@ export default function App() {
     socket.emit("room:join", { code: safeCode, name: safeName });
   }
 
+  function refreshLobbyList() {
+    if (joined) {
+      return;
+    }
+
+    setIsRefreshingLobbies(true);
+    socket.emit("room:list");
+  }
+
+  function joinLobby(lobbyCode) {
+    const safeName = name.trim();
+    if (!safeName) {
+      setMenuError("Pick a player name first.");
+      return;
+    }
+
+    const safeCode = String(lobbyCode || "").trim().toUpperCase();
+    if (!safeCode) {
+      return;
+    }
+
+    setMenuError("");
+    setRoomInput(safeCode);
+    socket.emit("room:join", { code: safeCode, name: safeName });
+  }
+
   function startRound() {
     if (document.documentElement.requestFullscreen && !document.fullscreenElement) {
       document.documentElement.requestFullscreen().catch(() => {});
@@ -853,6 +905,34 @@ export default function App() {
                 <button className="ghost" onClick={() => connectRoom(false)}>
                   Join Room
                 </button>
+              </div>
+
+              <div className="lobby-browser">
+                <div className="lobby-browser__head">
+                  <strong>Find Lobby</strong>
+                  <button type="button" className="overlay-toggle" onClick={refreshLobbyList} disabled={isRefreshingLobbies}>
+                    {isRefreshingLobbies ? "Refreshing..." : "Refresh"}
+                  </button>
+                </div>
+                {availableLobbies.length === 0 ? (
+                  <p className="muted">No open lobbies right now. Create one to get things started.</p>
+                ) : (
+                  <ul className="lobby-list">
+                    {availableLobbies.map((lobby) => (
+                      <li key={lobby.code} className="lobby-row">
+                        <div>
+                          <strong>{lobby.code}</strong>
+                          <p>
+                            {lobby.modeLabel} · {lobby.humans}/{lobby.capacity} humans · {lobby.spectators} spectators
+                          </p>
+                        </div>
+                        <button type="button" onClick={() => joinLobby(lobby.code)}>
+                          Join
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
               </div>
 
               <p className="error">{menuError}</p>

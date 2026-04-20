@@ -885,7 +885,41 @@ function removePlayer(socketId) {
   }
 }
 
+function listJoinableLobbies() {
+  const lobbies = [];
+
+  for (const room of rooms.values()) {
+    if (room.status !== "lobby") {
+      continue;
+    }
+
+    const humans = getHumanPlayers(room).length;
+    const spectators = [...room.players.values()].filter(isSpectatorPlayer).length;
+    if (humans >= ROOM_SIZE_MAX) {
+      continue;
+    }
+
+    lobbies.push({
+      code: room.code,
+      mode: room.mode,
+      modeLabel: getModeConfig(room.mode).label,
+      humans,
+      spectators,
+      capacity: ROOM_SIZE_MAX,
+    });
+  }
+
+  lobbies.sort((a, b) => b.humans - a.humans || a.code.localeCompare(b.code));
+  return lobbies;
+}
+
 io.on("connection", (socket) => {
+  socket.on("room:list", () => {
+    socket.emit("room:list", {
+      lobbies: listJoinableLobbies(),
+    });
+  });
+
   socket.on("room:create", ({ name, mode, botCount, noteCount, spectator }) => {
     const code = randomId();
     const room = makeRoom(code);
