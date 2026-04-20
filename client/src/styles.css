@@ -787,6 +787,72 @@ canvas {
   gap: 10px;
 }
 
+.chat-panel-fab {
+  position: fixed;
+  right: 16px;
+  bottom: 84px;
+  width: min(390px, calc(100vw - 24px));
+  z-index: 26;
+}
+
+.chat-fab {
+  position: fixed;
+  right: 16px;
+  bottom: 18px;
+  z-index: 27;
+  min-width: 92px;
+  padding: 11px 18px;
+}
+
+.chat-fab__badge {
+  position: absolute;
+  top: -8px;
+  right: -6px;
+  min-width: 20px;
+  height: 20px;
+  border-radius: 999px;
+  padding: 0 6px;
+  display: grid;
+  place-items: center;
+  font-size: 0.72rem;
+  font-weight: 800;
+  color: #ffffff;
+  background: #ef4444;
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  box-shadow: 0 6px 14px rgba(239, 68, 68, 0.42);
+}
+
+.role-brief-panel {
+  gap: 12px;
+}
+
+.role-brief-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.role-brief-item {
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 14px;
+  padding: 10px 12px;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.role-brief-item span {
+  display: block;
+  color: var(--accent);
+  font-size: 0.72rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.role-brief-item strong {
+  display: block;
+  margin-top: 6px;
+  line-height: 1.35;
+}
+
 .chat-log {
   display: grid;
   gap: 8px;
@@ -923,8 +989,24 @@ canvas {
   position: static;
 }
 
+.page.is-playing .chat-panel-fab {
+  position: fixed;
+}
+
+.page.is-playing .role-brief-panel {
+  order: 1;
+}
+
 .page.is-playing .chat-panel .chat-log {
   max-height: min(40vh, 360px);
+}
+
+.page.theme-light .role-brief-item {
+  background: rgba(255, 255, 255, 0.94);
+}
+
+.page.theme-light .chat-fab__badge {
+  border-color: rgba(15, 23, 42, 0.22);
 }
 
 .mini-panel {
@@ -1057,7 +1139,8 @@ canvas {
   .field-grid,
   .mode-grid,
   .masthead__stats,
-  .status-grid {
+  .status-grid,
+  .role-brief-grid {
     grid-template-columns: 1fr;
   }
 
@@ -1097,5 +1180,17 @@ canvas {
 
   .note-hud__form {
     min-width: 0;
+  }
+
+  .chat-panel-fab {
+    right: 10px;
+    left: 10px;
+    width: auto;
+    bottom: 86px;
+  }
+
+  .chat-fab {
+    right: 10px;
+    bottom: 10px;
   }
 }

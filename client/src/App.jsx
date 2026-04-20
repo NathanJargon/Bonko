@@ -144,6 +144,8 @@ export default function App() {
   const [chatInput, setChatInput] = useState("");
   const [noteInput, setNoteInput] = useState("");
   const [showMenus, setShowMenus] = useState(true);
+  const [isChatOpen, setIsChatOpen] = useState(false);
+  const [unreadChatCount, setUnreadChatCount] = useState(0);
   const [visualTheme, setVisualTheme] = useState("dark");
   const [draftMode, setDraftMode] = useState("practice");
   const [draftBotCount, setDraftBotCount] = useState(MODE_PRESETS.practice.botCount);
@@ -154,6 +156,7 @@ export default function App() {
   const keysRef = useRef({ up: false, down: false, left: false, right: false });
   const moveRef = useRef({ vx: 0, vy: 0 });
   const renderPlayersRef = useRef(new Map());
+  const lastSeenChatIdRef = useRef(null);
 
   const me = useMemo(() => {
     if (!snapshot) {
@@ -317,6 +320,48 @@ export default function App() {
   }, [snapshot]);
 
   useEffect(() => {
+    if (!joined || !snapshot) {
+      lastSeenChatIdRef.current = null;
+      setUnreadChatCount(0);
+      return;
+    }
+
+    const messages = snapshot.chat ?? [];
+    if (messages.length === 0) {
+      return;
+    }
+
+    const latestId = messages[messages.length - 1]?.id;
+    if (!latestId) {
+      return;
+    }
+
+    if (lastSeenChatIdRef.current == null) {
+      lastSeenChatIdRef.current = latestId;
+      return;
+    }
+
+    if (isChatOpen) {
+      lastSeenChatIdRef.current = latestId;
+      setUnreadChatCount(0);
+      return;
+    }
+
+    if (latestId === lastSeenChatIdRef.current) {
+      return;
+    }
+
+    const lastSeenIndex = messages.findIndex((message) => message.id === lastSeenChatIdRef.current);
+    const unseenCount = lastSeenIndex >= 0 ? messages.length - lastSeenIndex - 1 : 1;
+
+    if (unseenCount > 0) {
+      setUnreadChatCount((count) => Math.min(99, count + unseenCount));
+    }
+
+    lastSeenChatIdRef.current = latestId;
+  }, [joined, snapshot, isChatOpen]);
+
+  useEffect(() => {
     if (snapshot?.status === "active") {
       setShowMenus(false);
       return;
@@ -345,18 +390,6 @@ export default function App() {
       setSpectateTargetId(spectatablePlayers[0].id);
     }
   }, [isSpectating, spectatablePlayers, spectateTargetId]);
-
-  useEffect(() => {
-    const shouldFullscreen = joined && snapshot?.status === "active";
-
-    if (shouldFullscreen && !document.fullscreenElement && document.documentElement.requestFullscreen) {
-      document.documentElement.requestFullscreen().catch(() => {});
-    }
-
-    if (!shouldFullscreen && document.fullscreenElement) {
-      document.exitFullscreen().catch(() => {});
-    }
-  }, [joined, snapshot?.status]);
 
   useEffect(() => {
     const keyDown = (event) => {
@@ -789,10 +822,6 @@ export default function App() {
   }
 
   function startRound() {
-    if (document.documentElement.requestFullscreen && !document.fullscreenElement) {
-      document.documentElement.requestFullscreen().catch(() => {});
-    }
-
     socket.emit("round:start", { roomCode });
   }
 
@@ -809,6 +838,9 @@ export default function App() {
     setRoomCode("");
     setSnapshot(null);
     setChatInput("");
+    setIsChatOpen(false);
+    setUnreadChatCount(0);
+    lastSeenChatIdRef.current = null;
     setShowMenus(true);
     moveRef.current = { vx: 0, vy: 0 };
     keysRef.current = { up: false, down: false, left: false, right: false };
@@ -841,6 +873,20 @@ export default function App() {
     setChatInput("");
   }
 
+  function toggleChatPanel() {
+    setIsChatOpen((open) => {
+      const nextOpen = !open;
+      if (nextOpen) {
+        setUnreadChatCount(0);
+        const latestId = chatMessages[chatMessages.length - 1]?.id;
+        if (latestId) {
+          lastSeenChatIdRef.current = latestId;
+        }
+      }
+      return nextOpen;
+    });
+  }
+
   function handleInteract() {
     if (!roomCode || snapshot?.status === "lobby" || nearestNote || isSpectating) {
       return;
@@ -856,6 +902,22 @@ export default function App() {
   const cooldown = me ? Math.max(0, Math.ceil(((me.cooldownUntil ?? 0) - (snapshot?.now ?? Date.now())) / 1000)) : 0;
   const stunRemaining = me ? Math.max(0, Math.ceil(((me.stunnedUntil ?? 0) - (snapshot?.now ?? Date.now())) / 1000)) : 0;
   const roomScore = snapshot?.score ?? 0;
+  const roleHeading = isSpectating ? "You are Spectating" : me?.isShadow ? "You are Shadow" : "You are Crew";
+  const roleIntro = isSpectating
+    ? "You are out of the round, but you can still guide teammates by watching live players."
+    : me?.isShadow
+    ? "Hunt quietly and pick targets carefully. You win by eliminating the crew before they finish notes."
+    : "Work as a team, decode notes fast, and stay alive long enough to finish the objective.";
+  const roleObjective = isSpectating
+    ? "Watch active players and call out useful info in chat."
+    : me?.isShadow
+    ? "Tag crew players and stop them from reaching the note goal."
+    : `Decode and secure ${noteTarget} hidden notes before time runs out.`;
+  const roleSkills = isSpectating
+    ? "Tab or Next Camera to cycle players."
+    : me?.isShadow
+    ? "Space: Tag, Q: Mark, Shift: Dash"
+    : "No active abilities. Use movement, positioning, and comms.";
 
   return (
     <div className={`page tone-${modeTone} theme-${visualTheme} ${isPlaying ? "is-playing" : ""}`}>
@@ -1129,43 +1191,6 @@ export default function App() {
                 </section>
               )}
 
-              {snapshot.status === "active" && (
-                <section className="panel mini-panel pop-in">
-                  <div className="panel__head">
-                    <span className="panel__kicker">Role briefing</span>
-                    <h3>{isSpectating ? "You are Spectating" : me?.isShadow ? "You are Shadow" : "You are Crew"}</h3>
-                  </div>
-                  <p className="muted">
-                    {isSpectating
-                      ? "You can watch live players. Press Tab or use the button below to switch camera targets."
-                      : stunRemaining > 0
-                      ? `Stunned (${stunRemaining}s)`
-                      : me?.isShadow
-                      ? cooldown > 0
-                          ? `Tag cooldown: ${cooldown}s`
-                          : "Press Space to tag nearby crew. Q marks a target, Shift dashes."
-                      : "Collect hidden notes, stay alive, and watch the shadow."}
-                  </p>
-                  {isSpectating && (
-                    <button type="button" onClick={cycleSpectateTarget} disabled={spectatablePlayers.length < 2}>
-                      Next Player Camera
-                    </button>
-                  )}
-                  {me?.isShadow && (
-                    <div className="shadow-skill-grid">
-                      <div>
-                        <span>Dash</span>
-                        <strong>{shadowDashReady ? "Ready" : `${Math.max(0, Math.ceil(((me?.shadowDashCooldownUntil ?? 0) - (snapshot?.now ?? Date.now())) / 1000))}s`}</strong>
-                      </div>
-                      <div>
-                        <span>Mark</span>
-                        <strong>{shadowMarkReady ? "Ready" : `${Math.max(0, Math.ceil(((me?.shadowMarkCooldownUntil ?? 0) - (snapshot?.now ?? Date.now())) / 1000))}s`}</strong>
-                      </div>
-                    </div>
-                  )}
-                </section>
-              )}
-
               {snapshot.status === "ended" && (
                 <section className="panel mini-panel pop-in">
                   <div className="panel__head">
@@ -1191,37 +1216,93 @@ export default function App() {
                 </>
               )}
 
-              <section className="panel mini-panel pop-in chat-panel">
-                <div className="panel__head">
-                  <span className="panel__kicker">Comms</span>
-                  <h3>Live chat</h3>
-                </div>
+              {snapshot.status === "active" && (
+                <section className="panel mini-panel pop-in role-brief-panel">
+                  <div className="panel__head">
+                    <span className="panel__kicker">Role briefing</span>
+                    <h3>{roleHeading}</h3>
+                  </div>
 
-                <div className="chat-log">
-                  {chatMessages.length === 0 ? (
-                    <p className="muted">No messages yet.</p>
-                  ) : (
-                    chatMessages.map((message) => (
-                      <div key={message.id} className={`chat-line ${message.bot ? "bot" : "human"}`}>
-                        <strong>{message.author}</strong>
-                        <span>{message.text}</span>
-                      </div>
-                    ))
+                  <p className="muted">
+                    {stunRemaining > 0 && !isSpectating ? `Stunned (${stunRemaining}s). ` : ""}
+                    {roleIntro}
+                  </p>
+
+                  <div className="role-brief-grid">
+                    <div className="role-brief-item">
+                      <span>Objective</span>
+                      <strong>{roleObjective}</strong>
+                    </div>
+                    <div className="role-brief-item">
+                      <span>Skills</span>
+                      <strong>{roleSkills}</strong>
+                    </div>
+                  </div>
+
+                  {isSpectating && (
+                    <button type="button" onClick={cycleSpectateTarget} disabled={spectatablePlayers.length < 2}>
+                      Next Player Camera
+                    </button>
                   )}
-                </div>
 
-                <form className="chat-form" onSubmit={sendChat}>
-                  <input
-                    value={chatInput}
-                    onChange={(event) => setChatInput(event.target.value)}
-                    placeholder="Type a message..."
-                    maxLength={120}
-                  />
-                  <button type="submit">Send</button>
-                </form>
-              </section>
+                  {me?.isShadow && !isSpectating && (
+                    <div className="shadow-skill-grid">
+                      <div>
+                        <span>Dash</span>
+                        <strong>{shadowDashReady ? "Ready" : `${Math.max(0, Math.ceil(((me?.shadowDashCooldownUntil ?? 0) - (snapshot?.now ?? Date.now())) / 1000))}s`}</strong>
+                      </div>
+                      <div>
+                        <span>Mark</span>
+                        <strong>{shadowMarkReady ? "Ready" : `${Math.max(0, Math.ceil(((me?.shadowMarkCooldownUntil ?? 0) - (snapshot?.now ?? Date.now())) / 1000))}s`}</strong>
+                      </div>
+                    </div>
+                  )}
+
+                  {!isSpectating && me?.isShadow && cooldown > 0 && <p className="muted">Tag cooldown: {cooldown}s</p>}
+                </section>
+              )}
+
             </aside>
           </section>
+        )}
+
+        {joined && snapshot && isChatOpen && (
+          <section className="panel mini-panel pop-in chat-panel chat-panel-fab">
+            <div className="panel__head">
+              <span className="panel__kicker">Comms</span>
+              <h3>Live chat</h3>
+            </div>
+
+            <div className="chat-log">
+              {chatMessages.length === 0 ? (
+                <p className="muted">No messages yet.</p>
+              ) : (
+                chatMessages.map((message) => (
+                  <div key={message.id} className={`chat-line ${message.bot ? "bot" : "human"}`}>
+                    <strong>{message.author}</strong>
+                    <span>{message.text}</span>
+                  </div>
+                ))
+              )}
+            </div>
+
+            <form className="chat-form" onSubmit={sendChat}>
+              <input
+                value={chatInput}
+                onChange={(event) => setChatInput(event.target.value)}
+                placeholder="Type a message..."
+                maxLength={120}
+              />
+              <button type="submit">Send</button>
+            </form>
+          </section>
+        )}
+
+        {joined && snapshot && (
+          <button type="button" className="chat-fab" onClick={toggleChatPanel}>
+            Chat
+            {unreadChatCount > 0 && !isChatOpen && <span className="chat-fab__badge">{unreadChatCount}</span>}
+          </button>
         )}
 
         {joined && snapshot && nearestNote && me?.alive && (
