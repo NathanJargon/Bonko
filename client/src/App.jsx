@@ -12,11 +12,6 @@ const CANVAS_WIDTH = 980;
 const CANVAS_HEIGHT = 620;
 const LOGO_URL = "/logo.png";
 
-const VISUAL_THEMES = {
-  color: { label: "Color" },
-  mono: { label: "Black / White" },
-};
-
 const MODE_PRESETS = {
   classic: {
     label: "Classic",
@@ -60,29 +55,29 @@ function applyModeDefaults(mode) {
 }
 
 function getCanvasPalette(visualTheme) {
-  if (visualTheme === "mono") {
+  if (visualTheme === "light") {
     return {
-      bgStart: "#060606",
-      bgEnd: "#1d1d1d",
-      grid: "rgba(255,255,255,0.08)",
-      wallFill: "rgba(22,22,22,0.98)",
-      wallStroke: "rgba(255,255,255,0.28)",
-      noteActive: "#efefef",
-      noteInactive: "#505050",
-      noteStroke: "rgba(255,255,255,0.46)",
-      noteText: "#121212",
-      boost: "#fafafa",
-      neutral: "#525252",
-      me: "#ffffff",
-      bot: "#bcbcbc",
-      shadow: "#4b4b4b",
-      crew: "#d4d4d4",
-      dead: "#555555",
-      stunned: "#9e9e9e",
-      stunnedLabel: "#ffffff",
-      playerName: "#f8f8f8",
-      overlay: "rgba(10, 10, 10, 0.7)",
-      overlayText: "#f5f5f5",
+      bgStart: "#ffffff",
+      bgEnd: "#f1f5f9",
+      grid: "rgba(15,23,42,0.08)",
+      wallFill: "rgba(31,41,55,0.96)",
+      wallStroke: "rgba(15,23,42,0.35)",
+      noteActive: "#111827",
+      noteInactive: "#9ca3af",
+      noteStroke: "rgba(15,23,42,0.45)",
+      noteText: "#ffffff",
+      boost: "#10b981",
+      neutral: "#94a3b8",
+      me: "#f59e0b",
+      bot: "#0ea5e9",
+      shadow: "#ef4444",
+      crew: "#2563eb",
+      dead: "#9ca3af",
+      stunned: "#f97316",
+      stunnedLabel: "#111827",
+      playerName: "#111827",
+      overlay: "rgba(248, 250, 252, 0.72)",
+      overlayText: "#0f172a",
     };
   }
 
@@ -147,8 +142,7 @@ export default function App() {
   const [chatInput, setChatInput] = useState("");
   const [noteInput, setNoteInput] = useState("");
   const [showMenus, setShowMenus] = useState(true);
-  const [joinAsSpectator, setJoinAsSpectator] = useState(false);
-  const [visualTheme, setVisualTheme] = useState("color");
+  const [visualTheme, setVisualTheme] = useState("dark");
   const [draftMode, setDraftMode] = useState("practice");
   const [draftBotCount, setDraftBotCount] = useState(MODE_PRESETS.practice.botCount);
   const [draftNoteCount, setDraftNoteCount] = useState(MODE_PRESETS.practice.noteCount);
@@ -169,6 +163,8 @@ export default function App() {
 
   const isHost = Boolean(me?.isHost);
   const isSpectator = Boolean(me?.isSpectator);
+  const isBonkedOut = Boolean(me) && snapshot?.status === "active" && !me.alive;
+  const isSpectating = isSpectator || isBonkedOut;
   const canEditLobby = joined && isHost && snapshot?.status === "lobby";
   const currentMode = snapshot?.mode ?? draftMode;
   const currentPreset = MODE_PRESETS[currentMode] ?? MODE_PRESETS.classic;
@@ -244,7 +240,7 @@ export default function App() {
   }, [snapshot]);
 
   const spectateTarget = useMemo(() => {
-    if (!isSpectator) {
+    if (!isSpectating) {
       return null;
     }
 
@@ -254,7 +250,7 @@ export default function App() {
     }
 
     return spectatablePlayers[0] ?? null;
-  }, [isSpectator, spectatablePlayers, spectateTargetId]);
+  }, [isSpectating, spectatablePlayers, spectateTargetId]);
 
   useEffect(() => {
     const onJoined = ({ room }) => {
@@ -310,7 +306,7 @@ export default function App() {
   }, [nearestNote]);
 
   useEffect(() => {
-    if (!isSpectator) {
+    if (!isSpectating) {
       return;
     }
 
@@ -322,7 +318,7 @@ export default function App() {
     if (!spectatablePlayers.some((player) => player.id === spectateTargetId)) {
       setSpectateTargetId(spectatablePlayers[0].id);
     }
-  }, [isSpectator, spectatablePlayers, spectateTargetId]);
+  }, [isSpectating, spectatablePlayers, spectateTargetId]);
 
   useEffect(() => {
     const shouldFullscreen = joined && snapshot?.status === "active";
@@ -362,7 +358,7 @@ export default function App() {
       }
 
       if ((key === " " || key === "space") && roomCode) {
-        if (isSpectator) {
+        if (isSpectating) {
           return;
         }
         event.preventDefault();
@@ -385,14 +381,14 @@ export default function App() {
       }
 
       if (key === "e" && roomCode && snapshot?.status !== "lobby") {
-        if (isSpectator) {
+        if (isSpectating) {
           return;
         }
         event.preventDefault();
         socket.emit("player:interact", { roomCode });
       }
 
-      if (isSpectator && key === "tab" && spectatablePlayers.length > 0) {
+      if (isSpectating && key === "tab" && spectatablePlayers.length > 0) {
         event.preventDefault();
         const index = spectatablePlayers.findIndex((player) => player.id === spectateTargetId);
         const nextIndex = index < 0 ? 0 : (index + 1) % spectatablePlayers.length;
@@ -415,7 +411,7 @@ export default function App() {
       window.removeEventListener("keydown", keyDown);
       window.removeEventListener("keyup", keyUp);
     };
-  }, [roomCode, me?.isShadow, snapshot?.status, nearestNote, isSpectator, spectatablePlayers, spectateTargetId]);
+  }, [roomCode, me?.isShadow, snapshot?.status, nearestNote, isSpectating, spectatablePlayers, spectateTargetId]);
 
   useEffect(() => {
     let rafId = 0;
@@ -431,7 +427,7 @@ export default function App() {
         return;
       }
 
-      if (isSpectator) {
+      if (isSpectating) {
         if (moveRef.current.vx !== 0 || moveRef.current.vy !== 0) {
           moveRef.current = { vx: 0, vy: 0 };
           socket.emit("player:move", { roomCode, vx: 0, vy: 0 });
@@ -459,7 +455,7 @@ export default function App() {
     rafId = requestAnimationFrame(tick);
 
     return () => cancelAnimationFrame(rafId);
-  }, [joined, roomCode, snapshot?.status, isSpectator]);
+  }, [joined, roomCode, snapshot?.status, isSpectating]);
 
   useEffect(() => {
     let rafId = 0;
@@ -503,7 +499,7 @@ export default function App() {
         }
       }
 
-      const cameraFocus = isSpectator ? spectateTarget : me;
+      const cameraFocus = isSpectating ? spectateTarget : me;
       if (!cameraFocus) {
         return;
       }
@@ -625,16 +621,16 @@ export default function App() {
 
       ctx.restore();
 
-      if (!me.alive && snapshot.status === "active") {
+      if (isBonkedOut && snapshot.status === "active") {
         ctx.fillStyle = canvasPalette.overlay;
-        ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+        ctx.fillRect(0, 0, CANVAS_WIDTH, 86);
         ctx.fillStyle = canvasPalette.overlayText;
-        ctx.font = "700 40px Fredoka";
-        ctx.textAlign = "center";
-        ctx.fillText("Bonked Out", CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2);
+        ctx.font = "700 18px Fredoka";
+        ctx.textAlign = "left";
+        ctx.fillText("Bonked Out - Now Spectating", 16, 52);
       }
 
-      if (isSpectator) {
+      if (isSpectating) {
         ctx.fillStyle = "rgba(0, 0, 0, 0.25)";
         ctx.fillRect(14, 14, 320, 58);
         ctx.fillStyle = "#f8fafc";
@@ -648,7 +644,11 @@ export default function App() {
 
     rafId = requestAnimationFrame(renderFrame);
     return () => cancelAnimationFrame(rafId);
-  }, [snapshot, me, isSpectator, spectateTarget, canvasPalette]);
+  }, [snapshot, me, isSpectating, isBonkedOut, spectateTarget, canvasPalette]);
+
+  function toggleVisualTheme() {
+    setVisualTheme((current) => (current === "dark" ? "light" : "dark"));
+  }
 
   function cycleSpectateTarget() {
     if (spectatablePlayers.length === 0) {
@@ -724,7 +724,6 @@ export default function App() {
         mode: draftMode,
         botCount: draftMode === "classic" ? 0 : draftBotCount,
         noteCount: draftNoteCount,
-        spectator: joinAsSpectator,
       });
       return;
     }
@@ -734,7 +733,7 @@ export default function App() {
       return;
     }
 
-    socket.emit("room:join", { code: safeCode, name: safeName, spectator: joinAsSpectator });
+    socket.emit("room:join", { code: safeCode, name: safeName });
   }
 
   function startRound() {
@@ -766,7 +765,7 @@ export default function App() {
   function submitNote(event) {
     event.preventDefault();
 
-    if (!roomCode || snapshot?.status !== "active" || !nearestNote) {
+    if (!roomCode || snapshot?.status !== "active" || !nearestNote || !me?.alive) {
       return;
     }
 
@@ -791,7 +790,7 @@ export default function App() {
   }
 
   function handleInteract() {
-    if (!roomCode || snapshot?.status === "lobby" || nearestNote || isSpectator) {
+    if (!roomCode || snapshot?.status === "lobby" || nearestNote || isSpectating) {
       return;
     }
 
@@ -808,23 +807,14 @@ export default function App() {
 
   return (
     <div className={`page tone-${modeTone} theme-${visualTheme} ${isPlaying ? "is-playing" : ""}`}>
+      <button type="button" className="overlay-toggle theme-toggle-corner" onClick={toggleVisualTheme}>
+        {visualTheme === "dark" ? "White Mode" : "Dark Mode"}
+      </button>
       <div className="ambient ambient-a" />
       <div className="ambient ambient-b" />
       <main className={`game-shell ${isPlaying ? "is-playing" : ""}`}>
         <header className="masthead">
           <h1>Bonko</h1>
-          <div className="theme-switch" role="group" aria-label="Visual theme">
-            {Object.entries(VISUAL_THEMES).map(([theme, meta]) => (
-              <button
-                key={theme}
-                type="button"
-                className={`mode-chip ${visualTheme === theme ? "selected" : ""}`}
-                onClick={() => setVisualTheme(theme)}
-              >
-                {meta.label}
-              </button>
-            ))}
-          </div>
         </header>
 
         {!joined && (
@@ -862,9 +852,6 @@ export default function App() {
                 <button onClick={() => connectRoom(true)}>Create {MODE_PRESETS[draftMode].label} Room</button>
                 <button className="ghost" onClick={() => connectRoom(false)}>
                   Join Room
-                </button>
-                <button type="button" className="overlay-toggle" onClick={() => setJoinAsSpectator((value) => !value)}>
-                  {joinAsSpectator ? "Joining as Spectator" : "Joining as Player"}
                 </button>
               </div>
 
@@ -946,7 +933,7 @@ export default function App() {
                   <span>{players.length} players</span>
                   <span>{roomScore}/{noteTarget} notes</span>
                   <span>{formatSeconds(remaining)}</span>
-                  {isSpectator && <span>Spectator</span>}
+                  {isSpectating && <span>Spectating</span>}
                   {isPlaying && (
                     <button type="button" className="overlay-toggle" onClick={() => setShowMenus((visible) => !visible)}>
                       {overlaysVisible ? "Hide Menus" : "Show Menus"}
@@ -964,7 +951,7 @@ export default function App() {
                   <span>Move: WASD / Arrows</span>
                   <span>Tag: Space</span>
                   <span>Interact: E</span>
-                  {isSpectator && <span>Cycle View: Tab</span>}
+                  {isSpectating && <span>Cycle View: Tab</span>}
                   <span>{snapshot.pace.toFixed(2)}x pace</span>
                 </div>
               </div>
@@ -1066,10 +1053,10 @@ export default function App() {
                 <section className="panel mini-panel pop-in">
                   <div className="panel__head">
                     <span className="panel__kicker">Role briefing</span>
-                    <h3>{isSpectator ? "You are Spectating" : me?.isShadow ? "You are Shadow" : "You are Crew"}</h3>
+                    <h3>{isSpectating ? "You are Spectating" : me?.isShadow ? "You are Shadow" : "You are Crew"}</h3>
                   </div>
                   <p className="muted">
-                    {isSpectator
+                    {isSpectating
                       ? "You can watch live players. Press Tab or use the button below to switch camera targets."
                       : stunRemaining > 0
                       ? `Stunned (${stunRemaining}s)`
@@ -1079,7 +1066,7 @@ export default function App() {
                           : "Press Space to tag nearby crew. Q marks a target, Shift dashes."
                       : "Collect hidden notes, stay alive, and watch the shadow."}
                   </p>
-                  {isSpectator && (
+                  {isSpectating && (
                     <button type="button" onClick={cycleSpectateTarget} disabled={spectatablePlayers.length < 2}>
                       Next Player Camera
                     </button>
@@ -1157,7 +1144,7 @@ export default function App() {
           </section>
         )}
 
-        {joined && snapshot && nearestNote && (
+        {joined && snapshot && nearestNote && me?.alive && (
           <section className="note-hud pop-in">
             <div className="note-hud__text">
               <span className="panel__kicker">Hidden Note</span>

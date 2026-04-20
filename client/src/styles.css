@@ -36,18 +36,22 @@ body {
     linear-gradient(160deg, #04060b 0%, #07101c 50%, #0c1528 100%);
 }
 
-.theme-mono {
+.theme-light {
   --accent: #ffffff;
   --accent-2: #d4d4d4;
   --accent-3: #a3a3a3;
-  --muted: #bdbdbd;
+  --muted: #475569;
+  --ink: #0f172a;
+  --line: rgba(15, 23, 42, 0.16);
+  --line-strong: rgba(15, 23, 42, 0.24);
+  --shadow: 0 18px 44px rgba(15, 23, 42, 0.16);
 }
 
-.page.theme-mono {
+.page.theme-light {
   background:
-    radial-gradient(circle at top left, rgba(255, 255, 255, 0.08), transparent 36%),
-    radial-gradient(circle at 82% 16%, rgba(196, 196, 196, 0.1), transparent 30%),
-    linear-gradient(160deg, #050505 0%, #0e0e0e 54%, #161616 100%);
+    radial-gradient(circle at top left, rgba(14, 165, 233, 0.08), transparent 34%),
+    radial-gradient(circle at 82% 16%, rgba(15, 23, 42, 0.06), transparent 28%),
+    linear-gradient(160deg, #ffffff 0%, #f8fafc 52%, #eef2ff 100%);
 }
 
 button,
@@ -124,23 +128,23 @@ input {
   animation: drift-b 20s ease-in-out infinite alternate;
 }
 
-.page.theme-mono .ambient-a {
-  background: rgba(255, 255, 255, 0.12);
+.page.theme-light .ambient-a {
+  background: rgba(14, 165, 233, 0.12);
 }
 
-.page.theme-mono .ambient-b {
-  background: rgba(185, 185, 185, 0.12);
+.page.theme-light .ambient-b {
+  background: rgba(15, 23, 42, 0.1);
 }
 
-.page.theme-mono .panel,
-.page.theme-mono .mode-card,
-.page.theme-mono .mode-chip,
-.page.theme-mono .setting-row,
-.page.theme-mono .control-chip,
-.page.theme-mono .chat-line,
-.page.theme-mono .status-grid div,
-.page.theme-mono .roster-row {
-  background: rgba(18, 18, 18, 0.92);
+.page.theme-light .panel,
+.page.theme-light .mode-card,
+.page.theme-light .mode-chip,
+.page.theme-light .setting-row,
+.page.theme-light .control-chip,
+.page.theme-light .chat-line,
+.page.theme-light .status-grid div,
+.page.theme-light .roster-row {
+  background: rgba(255, 255, 255, 0.94);
 }
 
 .game-shell {
@@ -179,6 +183,13 @@ input {
   display: none;
 }
 
+.theme-toggle-corner {
+  position: fixed;
+  top: 14px;
+  right: 14px;
+  z-index: 30;
+}
+
 .page.is-playing .masthead h1 {
   font-size: clamp(1.35rem, 2.6vw, 2rem);
   line-height: 1;
@@ -197,15 +208,6 @@ input {
   text-align: center;
   padding: 6px 2px 4px;
   gap: 8px;
-}
-
-.theme-switch {
-  display: inline-flex;
-  gap: 8px;
-}
-
-.theme-switch .mode-chip {
-  min-width: 128px;
 }
 
 .site-logo {
