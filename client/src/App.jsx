@@ -895,6 +895,52 @@ export default function App() {
     socket.emit("player:interact", { roomCode });
   }
 
+  function setMoveKey(direction, pressed) {
+    keysRef.current[direction] = pressed;
+  }
+
+  function handleTouchMove(direction, pressed) {
+    if (!joined || !roomCode || snapshot?.status !== "active" || isSpectating) {
+      return;
+    }
+
+    setMoveKey(direction, pressed);
+  }
+
+  function handleTouchAction(action) {
+    if (!joined || !roomCode) {
+      return;
+    }
+
+    if (action === "tag") {
+      if (isSpectating) {
+        return;
+      }
+
+      socket.emit("player:tag", { roomCode });
+      return;
+    }
+
+    if (action === "interact") {
+      handleInteract();
+      return;
+    }
+
+    if (action === "mark" && me?.isShadow && snapshot?.status === "active") {
+      socket.emit("player:shadow-skill", { roomCode, skill: "mark" });
+      return;
+    }
+
+    if (action === "dash" && me?.isShadow && snapshot?.status === "active") {
+      socket.emit("player:shadow-skill", { roomCode, skill: "dash" });
+      return;
+    }
+
+    if (action === "cycle" && isSpectating) {
+      cycleSpectateTarget();
+    }
+  }
+
   const players = snapshot?.players ?? [];
   const remaining = snapshot?.endsAt
     ? Math.max(0, Math.ceil((snapshot.endsAt - (snapshot.now ?? Date.now())) / 1000))
@@ -1000,66 +1046,6 @@ export default function App() {
               <p className="error">{menuError}</p>
             </section>
 
-            <aside className="panel info-panel pop-in">
-              <div className="panel__head">
-                <span className="panel__kicker">Current setup</span>
-                <h2>Practice-ready settings</h2>
-              </div>
-
-              <div className="settings-stack">
-                <div className="setting-row">
-                  <div>
-                    <strong>Selected mode</strong>
-                    <p>{MODE_PRESETS[draftMode].description}</p>
-                  </div>
-                  <span className="setting-pill">{MODE_PRESETS[draftMode].label}</span>
-                </div>
-
-                <div className="setting-row">
-                  <div>
-                    <strong>Bot count</strong>
-                    <p>{draftMode === "classic" ? "Disabled in Classic." : `${draftBotCount} training bots will join the room.`}</p>
-                  </div>
-                  <div className="stepper">
-                    <button type="button" onClick={() => changeBotCount(-1)} disabled={draftMode === "classic"}>
-                      -
-                    </button>
-                    <span>{draftMode === "classic" ? 0 : draftBotCount}</span>
-                    <button type="button" onClick={() => changeBotCount(1)} disabled={draftMode === "classic"}>
-                      +
-                    </button>
-                  </div>
-                </div>
-
-                <div className="setting-row">
-                  <div>
-                    <strong>Note count</strong>
-                    <p>Set how many notes are active in this match.</p>
-                  </div>
-                  <div className="stepper">
-                    <button type="button" onClick={() => changeNoteCount(-1)}>
-                      -
-                    </button>
-                    <span>{draftNoteCount}</span>
-                    <button type="button" onClick={() => changeNoteCount(1)}>
-                      +
-                    </button>
-                  </div>
-                </div>
-
-                <div className="setting-row">
-                  <div>
-                    <strong>Movement pace</strong>
-                    <p>{currentPreset.paceLabel}</p>
-                  </div>
-                  <span className="setting-pill">Faster</span>
-                </div>
-              </div>
-
-              <div className="note-box">
-                Practice mode spawns bots immediately so you can start a match with just one human.
-              </div>
-            </aside>
           </section>
         )}
 
@@ -1363,6 +1349,130 @@ export default function App() {
             <button type="button" className="control-action" onClick={handleInteract} disabled={!nearestInteractable || snapshot.status === "lobby" || Boolean(nearestNote)}>
               Use Nearby
             </button>
+          </footer>
+        )}
+
+        {joined && snapshot && isPlaying && (
+          <footer className="mobile-controls pop-in" aria-label="Mobile controls">
+            <div className="mobile-controls__pad" aria-label="Movement pad">
+              <button
+                type="button"
+                className="mobile-controls__button mobile-controls__button--up"
+                aria-label="Move up"
+                onPointerDown={(event) => {
+                  event.preventDefault();
+                  handleTouchMove("up", true);
+                }}
+                onPointerUp={(event) => {
+                  event.preventDefault();
+                  handleTouchMove("up", false);
+                }}
+                onPointerCancel={(event) => {
+                  event.preventDefault();
+                  handleTouchMove("up", false);
+                }}
+                onPointerLeave={(event) => {
+                  event.preventDefault();
+                  handleTouchMove("up", false);
+                }}
+              >
+                ▲
+              </button>
+              <button
+                type="button"
+                className="mobile-controls__button mobile-controls__button--left"
+                aria-label="Move left"
+                onPointerDown={(event) => {
+                  event.preventDefault();
+                  handleTouchMove("left", true);
+                }}
+                onPointerUp={(event) => {
+                  event.preventDefault();
+                  handleTouchMove("left", false);
+                }}
+                onPointerCancel={(event) => {
+                  event.preventDefault();
+                  handleTouchMove("left", false);
+                }}
+                onPointerLeave={(event) => {
+                  event.preventDefault();
+                  handleTouchMove("left", false);
+                }}
+              >
+                ◀
+              </button>
+              <div className="mobile-controls__pad-center" aria-hidden="true" />
+              <button
+                type="button"
+                className="mobile-controls__button mobile-controls__button--right"
+                aria-label="Move right"
+                onPointerDown={(event) => {
+                  event.preventDefault();
+                  handleTouchMove("right", true);
+                }}
+                onPointerUp={(event) => {
+                  event.preventDefault();
+                  handleTouchMove("right", false);
+                }}
+                onPointerCancel={(event) => {
+                  event.preventDefault();
+                  handleTouchMove("right", false);
+                }}
+                onPointerLeave={(event) => {
+                  event.preventDefault();
+                  handleTouchMove("right", false);
+                }}
+              >
+                ▶
+              </button>
+              <button
+                type="button"
+                className="mobile-controls__button mobile-controls__button--down"
+                aria-label="Move down"
+                onPointerDown={(event) => {
+                  event.preventDefault();
+                  handleTouchMove("down", true);
+                }}
+                onPointerUp={(event) => {
+                  event.preventDefault();
+                  handleTouchMove("down", false);
+                }}
+                onPointerCancel={(event) => {
+                  event.preventDefault();
+                  handleTouchMove("down", false);
+                }}
+                onPointerLeave={(event) => {
+                  event.preventDefault();
+                  handleTouchMove("down", false);
+                }}
+              >
+                ▼
+              </button>
+            </div>
+
+            <div className="mobile-controls__actions" aria-label="Action buttons">
+              <button type="button" className="mobile-controls__button mobile-controls__button--accent" onClick={() => handleTouchAction("tag")}>
+                Tag
+              </button>
+              <button type="button" className="mobile-controls__button" onClick={() => handleTouchAction("interact")} disabled={!nearestInteractable || snapshot.status === "lobby" || Boolean(nearestNote)}>
+                Use
+              </button>
+              {me?.isShadow && (
+                <>
+                  <button type="button" className="mobile-controls__button" onClick={() => handleTouchAction("mark")} disabled={!shadowMarkReady}>
+                    Mark
+                  </button>
+                  <button type="button" className="mobile-controls__button" onClick={() => handleTouchAction("dash")} disabled={!shadowDashReady}>
+                    Dash
+                  </button>
+                </>
+              )}
+              {isSpectating && (
+                <button type="button" className="mobile-controls__button" onClick={() => handleTouchAction("cycle")} disabled={spectatablePlayers.length < 2}>
+                  Cycle
+                </button>
+              )}
+            </div>
           </footer>
         )}
       </main>
