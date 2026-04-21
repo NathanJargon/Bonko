@@ -29,19 +29,15 @@ body,
 body {
   font-family: Outfit, sans-serif;
   color: var(--ink);
-  background:
-    radial-gradient(circle at top left, rgba(110, 231, 249, 0.1), transparent 38%),
-    radial-gradient(circle at 85% 18%, rgba(249, 168, 212, 0.12), transparent 30%),
-    radial-gradient(circle at 30% 95%, rgba(139, 255, 184, 0.08), transparent 34%),
-    linear-gradient(160deg, #04060b 0%, #07101c 50%, #0c1528 100%);
+  background: #000;
 }
 
 .theme-light {
   --accent: #ffffff;
   --accent-2: #d4d4d4;
   --accent-3: #a3a3a3;
-  --muted: #475569;
-  --ink: #0f172a;
+  --muted: #566173;
+  --ink: #1f2937;
   --line: rgba(15, 23, 42, 0.16);
   --line-strong: rgba(15, 23, 42, 0.24);
   --shadow: 0 18px 44px rgba(15, 23, 42, 0.16);
@@ -66,6 +62,7 @@ input {
   overflow-y: auto;
   padding: 18px 18px 112px;
   color: var(--ink);
+  background: #000;
 }
 
 .page.is-playing {
@@ -116,7 +113,7 @@ input {
   height: 360px;
   left: -110px;
   top: -80px;
-  background: rgba(110, 231, 249, 0.16);
+  background: rgba(255, 255, 255, 0.04);
   animation: drift-a 16s ease-in-out infinite alternate;
 }
 
@@ -125,7 +122,7 @@ input {
   height: 460px;
   right: -120px;
   bottom: -130px;
-  background: rgba(249, 168, 212, 0.14);
+  background: rgba(255, 255, 255, 0.03);
   animation: drift-b 20s ease-in-out infinite alternate;
 }
 
@@ -155,15 +152,21 @@ input {
 .page.theme-light .note-hud__text p,
 .page.theme-light .chat-line span,
 .page.theme-light .control-chip p,
-.page.theme-light .roster-row__name em {
-  color: #334155;
+.page.theme-light .roster-row__name em,
+.page.theme-light .lobby-row p,
+.page.theme-light .status-grid strong,
+.page.theme-light .roster-row__state {
+  color: var(--muted);
 }
 
 .page.theme-light .masthead h1,
 .page.theme-light .panel h2,
 .page.theme-light .panel h3,
-.page.theme-light .lobby-row strong {
-  color: #0f172a;
+.page.theme-light .lobby-row strong,
+.page.theme-light .note-hud__text strong,
+.page.theme-light .overlay-toggle,
+.page.theme-light input {
+  color: var(--ink);
 }
 
 .page.theme-light .hud-strip span,
@@ -171,14 +174,13 @@ input {
 .page.theme-light .status-grid span,
 .page.theme-light .roster-row__state {
   background: rgba(15, 23, 42, 0.08);
-  color: #1e293b;
+  color: var(--ink);
   border: 1px solid rgba(15, 23, 42, 0.14);
 }
 
 .page.theme-light .overlay-toggle {
   border-color: rgba(15, 23, 42, 0.22);
   background: rgba(255, 255, 255, 0.96);
-  color: #0f172a;
 }
 
 .page.theme-light .note-hud {
@@ -186,13 +188,8 @@ input {
   background: rgba(255, 255, 255, 0.96);
 }
 
-.page.theme-light .note-hud__text strong {
-  color: #0f172a;
-}
-
 .page.theme-light input {
   background: rgba(255, 255, 255, 0.96);
-  color: #0f172a;
   border-color: rgba(15, 23, 42, 0.22);
 }
 
