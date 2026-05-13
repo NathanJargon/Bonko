@@ -311,209 +311,79 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    if (joined) {
-      return;
-    }
-
-    setIsRefreshingLobbies(true);
-    socket.emit("room:list");
-
-    const interval = window.setInterval(() => {
-      socket.emit("room:list");
-    }, 5000);
-
-    return () => {
-      window.clearInterval(interval);
-    };
-  }, [joined]);
-
-  useEffect(() => {
-    if (!snapshot || snapshot.status !== "lobby") {
-      return;
-    }
-
-    const nextMode = snapshot.mode && MODE_PRESETS[snapshot.mode] ? snapshot.mode : "classic";
-    setDraftMode(nextMode);
-    setDraftBotCount(snapshot.botCount ?? MODE_PRESETS[nextMode].botCount);
-    setDraftNoteCount(snapshot.noteCount ?? MODE_PRESETS[nextMode].noteCount);
-  }, [snapshot]);
-
-  useEffect(() => {
-    const predicted = predictedSelfRef.current;
-
-    if (!me || !snapshot || snapshot.status !== "active" || isSpectating) {
-      predictedSelfRef.current = { x: 0, y: 0, initialized: false, lastFrameAt: 0 };
-      return;
-    }
-
-    if (!predicted.initialized) {
-      predictedSelfRef.current = {
-        x: me.x,
-        y: me.y,
-        initialized: true,
-        lastFrameAt: performance.now(),
-      };
-      return;
-    }
-
-    const drift = Math.hypot(predicted.x - me.x, predicted.y - me.y);
-    if (drift > 72) {
-      predicted.x = me.x;
-      predicted.y = me.y;
-      predicted.lastFrameAt = performance.now();
-    }
-  }, [me?.id, me?.x, me?.y, snapshot?.status, isSpectating]);
-
-  useEffect(() => {
-    if (!joined || !snapshot) {
-      lastSeenChatIdRef.current = null;
-      setUnreadChatCount(0);
-      return;
-    }
-
-    const messages = snapshot.chat ?? [];
-    if (messages.length === 0) {
-      return;
-    }
-
-    const latestId = messages[messages.length - 1]?.id;
-    if (!latestId) {
-      return;
-    }
-
-    if (lastSeenChatIdRef.current == null) {
-      lastSeenChatIdRef.current = latestId;
-      return;
-    }
-
-    if (isChatOpen) {
-      lastSeenChatIdRef.current = latestId;
-      setUnreadChatCount(0);
-      return;
-    }
-
-    if (latestId === lastSeenChatIdRef.current) {
-      return;
-    }
-
-    const lastSeenIndex = messages.findIndex((message) => message.id === lastSeenChatIdRef.current);
-    const unseenCount = lastSeenIndex >= 0 ? messages.length - lastSeenIndex - 1 : 1;
-
-    if (unseenCount > 0) {
-      setUnreadChatCount((count) => Math.min(99, count + unseenCount));
-    }
-
-    lastSeenChatIdRef.current = latestId;
-  }, [joined, snapshot, isChatOpen]);
-
-  useEffect(() => {
-    if (snapshot?.status === "active") {
-      setShowMenus(false);
-      return;
-    }
-
-    setShowMenus(true);
-  }, [snapshot?.status]);
-
-  useEffect(() => {
-    if (!nearestNote) {
-      setNoteInput("");
-    }
-  }, [nearestNote]);
-
-  useEffect(() => {
-    if (!isSpectating) {
-      return;
-    }
-
-    if (spectatablePlayers.length === 0) {
-      setSpectateTargetId(null);
-      return;
-    }
-
-    if (!spectatablePlayers.some((player) => player.id === spectateTargetId)) {
-      setSpectateTargetId(spectatablePlayers[0].id);
-    }
-  }, [isSpectating, spectatablePlayers, spectateTargetId]);
-
-  useEffect(() => {
     const keyDown = (event) => {
       const target = event.target;
       if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || target?.isContentEditable) {
         return;
       }
 
-      const key = event.key.toLowerCase();
-      if (key === "w" || key === "arrowup") {
+      const key = (event.key || '').toLowerCase();
+      if (key === 'w' || key === 'arrowup') {
         event.preventDefault();
         keysRef.current.up = true;
       }
-      if (key === "s" || key === "arrowdown") {
+      if (key === 's' || key === 'arrowdown') {
         event.preventDefault();
         keysRef.current.down = true;
       }
-      if (key === "a" || key === "arrowleft") {
+      if (key === 'a' || key === 'arrowleft') {
         event.preventDefault();
         keysRef.current.left = true;
       }
-      if (key === "d" || key === "arrowright") {
+      if (key === 'd' || key === 'arrowright') {
         event.preventDefault();
         keysRef.current.right = true;
       }
 
-      if ((key === " " || key === "space") && roomCode) {
-        if (isSpectating) {
-          return;
-        }
+      if ((key === ' ' || key === 'space') && roomCode) {
+        if (isSpectating) return;
         event.preventDefault();
-        socket.emit("player:tag", { roomCode });
+        socket.emit('player:tag', { roomCode });
       }
 
-      if (key === "e" && nearestNote) {
+      if (key === 'e' && nearestNote) {
         event.preventDefault();
         return;
       }
 
-      if (me?.isShadow && key === "q" && roomCode && snapshot?.status === "active") {
+      if (me?.isShadow && key === 'q' && roomCode && snapshot?.status === 'active') {
         event.preventDefault();
-        socket.emit("player:shadow-skill", { roomCode, skill: "mark" });
+        socket.emit('player:shadow-skill', { roomCode, skill: 'mark' });
       }
 
-      if (me?.isShadow && key === "shift" && roomCode && snapshot?.status === "active") {
+      if (me?.isShadow && key === 'shift' && roomCode && snapshot?.status === 'active') {
         event.preventDefault();
-        socket.emit("player:shadow-skill", { roomCode, skill: "dash" });
+        socket.emit('player:shadow-skill', { roomCode, skill: 'dash' });
       }
 
-      if (key === "e" && roomCode && snapshot?.status !== "lobby") {
-        if (isSpectating) {
-          return;
-        }
+      if (key === 'e' && roomCode && snapshot?.status !== 'lobby') {
+        if (isSpectating) return;
         event.preventDefault();
-        socket.emit("player:interact", { roomCode });
+        socket.emit('player:interact', { roomCode });
       }
 
-      if (isSpectating && key === "tab" && spectatablePlayers.length > 0) {
+      if (isSpectating && key === 'tab' && spectatablePlayers.length > 0) {
         event.preventDefault();
-        const index = spectatablePlayers.findIndex((player) => player.id === spectateTargetId);
+        const index = spectatablePlayers.findIndex((p) => p.id === spectateTargetId);
         const nextIndex = index < 0 ? 0 : (index + 1) % spectatablePlayers.length;
         setSpectateTargetId(spectatablePlayers[nextIndex].id);
       }
     };
 
     const keyUp = (event) => {
-      const key = event.key.toLowerCase();
-      if (key === "w" || key === "arrowup") keysRef.current.up = false;
-      if (key === "s" || key === "arrowdown") keysRef.current.down = false;
-      if (key === "a" || key === "arrowleft") keysRef.current.left = false;
-      if (key === "d" || key === "arrowright") keysRef.current.right = false;
+      const key = (event.key || '').toLowerCase();
+      if (key === 'w' || key === 'arrowup') keysRef.current.up = false;
+      if (key === 's' || key === 'arrowdown') keysRef.current.down = false;
+      if (key === 'a' || key === 'arrowleft') keysRef.current.left = false;
+      if (key === 'd' || key === 'arrowright') keysRef.current.right = false;
     };
 
-    window.addEventListener("keydown", keyDown);
-    window.addEventListener("keyup", keyUp);
+    window.addEventListener('keydown', keyDown);
+    window.addEventListener('keyup', keyUp);
 
     return () => {
-      window.removeEventListener("keydown", keyDown);
-      window.removeEventListener("keyup", keyUp);
+      window.removeEventListener('keydown', keyDown);
+      window.removeEventListener('keyup', keyUp);
     };
   }, [roomCode, me?.isShadow, snapshot?.status, nearestNote, isSpectating, spectatablePlayers, spectateTargetId]);
 

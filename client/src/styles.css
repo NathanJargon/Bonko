@@ -753,9 +753,9 @@ button.ghost {
 
 .arena-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1.35fr) minmax(280px, 0.92fr) minmax(300px, 1fr);
   gap: 16px;
-  align-items: center;
+  align-items: stretch;
 }
 
 .page.is-playing .arena-grid {
