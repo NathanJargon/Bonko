@@ -10,6 +10,11 @@ const socket = io(SOCKET_URL, {
 
 const CANVAS_WIDTH = 980;
 const CANVAS_HEIGHT = 620;
+const PLAYER_SPEED = 360;
+const MODE_PACE = {
+  classic: 1,
+  practice: 1.02,
+};
 const LOGO_URL = "/logo.png";
 
 const MODE_PRESETS = {
@@ -37,6 +42,19 @@ function clamp(value, min, max) {
 
 function lerp(a, b, t) {
   return a + (b - a) * t;
+}
+
+function getModePace(mode) {
+  return MODE_PACE[mode] ?? 1;
+}
+
+function getLocalMovementMultiplier(player, now) {
+  const boostMultiplier = player.speedBoostUntil && player.speedBoostUntil > now ? 1.35 : 1;
+  const shadowDashMultiplier = player.role === "shadow" && player.shadowDashUntil && player.shadowDashUntil > now ? 1.5 : 1;
+  const slowMultiplier = player.slowedUntil && player.slowedUntil > now ? 0.72 : 1;
+  const stunMultiplier = player.stunnedUntil && player.stunnedUntil > now ? 0 : 1;
+
+  return boostMultiplier * shadowDashMultiplier * slowMultiplier * stunMultiplier;
 }
 
 function randomPilotName() {
@@ -156,6 +174,7 @@ export default function App() {
   const keysRef = useRef({ up: false, down: false, left: false, right: false });
   const moveRef = useRef({ vx: 0, vy: 0 });
   const renderPlayersRef = useRef(new Map());
+  const predictedSelfRef = useRef({ x: 0, y: 0, initialized: false, lastFrameAt: 0 });
   const lastSeenChatIdRef = useRef(null);
 
   const me = useMemo(() => {
@@ -318,6 +337,32 @@ export default function App() {
     setDraftBotCount(snapshot.botCount ?? MODE_PRESETS[nextMode].botCount);
     setDraftNoteCount(snapshot.noteCount ?? MODE_PRESETS[nextMode].noteCount);
   }, [snapshot]);
+
+  useEffect(() => {
+    const predicted = predictedSelfRef.current;
+
+    if (!me || !snapshot || snapshot.status !== "active" || isSpectating) {
+      predictedSelfRef.current = { x: 0, y: 0, initialized: false, lastFrameAt: 0 };
+      return;
+    }
+
+    if (!predicted.initialized) {
+      predictedSelfRef.current = {
+        x: me.x,
+        y: me.y,
+        initialized: true,
+        lastFrameAt: performance.now(),
+      };
+      return;
+    }
+
+    const drift = Math.hypot(predicted.x - me.x, predicted.y - me.y);
+    if (drift > 72) {
+      predicted.x = me.x;
+      predicted.y = me.y;
+      predicted.lastFrameAt = performance.now();
+    }
+  }, [me?.id, me?.x, me?.y, snapshot?.status, isSpectating]);
 
   useEffect(() => {
     if (!joined || !snapshot) {
@@ -519,7 +564,7 @@ export default function App() {
   useEffect(() => {
     let rafId = 0;
 
-    const renderFrame = () => {
+    const renderFrame = (timestamp) => {
       rafId = requestAnimationFrame(renderFrame);
       if (!snapshot || !me || !canvasRef.current) {
         return;
@@ -531,25 +576,43 @@ export default function App() {
         return;
       }
 
-      const dt = 0.35;
+      const now = timestamp ?? performance.now();
       const world = snapshot.world;
       const tracked = renderPlayersRef.current;
+      const predictedSelf = predictedSelfRef.current;
+
+      if (predictedSelf.initialized && joined && snapshot.status === "active" && !isSpectating) {
+        const deltaSeconds = predictedSelf.lastFrameAt ? Math.min((now - predictedSelf.lastFrameAt) / 1000, 0.05) : 0;
+        const playerMultiplier = getLocalMovementMultiplier(me, snapshot.now ?? Date.now());
+        const pace = getModePace(snapshot.mode);
+
+        predictedSelf.x += moveRef.current.vx * PLAYER_SPEED * pace * playerMultiplier * deltaSeconds;
+        predictedSelf.y += moveRef.current.vy * PLAYER_SPEED * pace * playerMultiplier * deltaSeconds;
+        predictedSelf.x = clamp(predictedSelf.x, 20, world.width - 20);
+        predictedSelf.y = clamp(predictedSelf.y, 20, world.height - 20);
+        predictedSelf.lastFrameAt = now;
+      }
 
       snapshot.players.forEach((player) => {
+        if (player.id === me.id && predictedSelf.initialized) {
+          tracked.set(player.id, { x: predictedSelf.x, y: predictedSelf.y });
+          return;
+        }
+
         const prev = tracked.get(player.id);
         if (!prev) {
           tracked.set(player.id, { x: player.x, y: player.y });
           return;
         }
 
-        prev.x = lerp(prev.x, player.x, dt);
-        prev.y = lerp(prev.y, player.y, dt);
+        prev.x = lerp(prev.x, player.x, 0.35);
+        prev.y = lerp(prev.y, player.y, 0.35);
       });
 
       const selfTracked = tracked.get(me.id);
-      if (selfTracked) {
-        selfTracked.x = me.x;
-        selfTracked.y = me.y;
+      if (selfTracked && predictedSelf.initialized) {
+        selfTracked.x = predictedSelf.x;
+        selfTracked.y = predictedSelf.y;
       }
 
       for (const key of [...tracked.keys()]) {
@@ -558,7 +621,7 @@ export default function App() {
         }
       }
 
-      const cameraFocus = isSpectating ? spectateTarget : me;
+      const cameraFocus = isSpectating ? spectateTarget : (tracked.get(me.id) || me);
       if (!cameraFocus) {
         return;
       }
@@ -843,6 +906,7 @@ export default function App() {
     lastSeenChatIdRef.current = null;
     setShowMenus(true);
     moveRef.current = { vx: 0, vy: 0 };
+    predictedSelfRef.current = { x: 0, y: 0, initialized: false, lastFrameAt: 0 };
     keysRef.current = { up: false, down: false, left: false, right: false };
   }
 
@@ -1015,6 +1079,47 @@ export default function App() {
                 </button>
               </div>
 
+              <p className="error">{menuError}</p>
+            </section>
+
+            <section className="panel mini-panel pop-in menu-panel menu-panel--brief">
+              <div className="panel__head">
+                <span className="panel__kicker">Round brief</span>
+                <h3>How the room plays</h3>
+              </div>
+
+              <div className="status-grid menu-facts">
+                <div>
+                  <span>Round flow</span>
+                  <strong>Server-led, shared for everyone</strong>
+                </div>
+                <div>
+                  <span>Movement</span>
+                  <strong>Snappy inputs with soft smoothing</strong>
+                </div>
+                <div>
+                  <span>Practice</span>
+                  <strong>Bots let you warm up solo</strong>
+                </div>
+                <div>
+                  <span>Host duty</span>
+                  <strong>Controls the mode and restart</strong>
+                </div>
+              </div>
+
+              <div className="menu-shortcuts">
+                <span>WASD / Arrows</span>
+                <span>Space to tag</span>
+                <span>E to interact</span>
+              </div>
+            </section>
+
+            <section className="panel mini-panel pop-in menu-panel menu-panel--lobbies">
+              <div className="panel__head">
+                <span className="panel__kicker">Open rooms</span>
+                <h3>Jump into a lobby</h3>
+              </div>
+
               <div className="lobby-browser">
                 <div className="lobby-browser__head">
                   <strong>Find Lobby</strong>
@@ -1042,8 +1147,6 @@ export default function App() {
                   </ul>
                 )}
               </div>
-
-              <p className="error">{menuError}</p>
             </section>
 
           </section>
