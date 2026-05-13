@@ -751,20 +751,30 @@ button.ghost {
   background: rgba(255, 255, 255, 0.94);
 }
 
-.arena-grid {
+.arena-shell {
   display: grid;
-  grid-template-columns: minmax(0, 1.35fr) minmax(280px, 0.92fr) minmax(300px, 1fr);
   gap: 16px;
-  align-items: stretch;
 }
 
-.page.is-playing .arena-grid {
-  min-height: calc(100vh - 82px);
-  align-items: stretch;
+.arena-lower {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+  align-items: start;
 }
 
-.page.is-playing .stage {
+.arena-column {
+  width: 100%;
+}
+
+.page.is-playing .arena-shell {
   min-height: calc(100vh - 82px);
+}
+
+.page.is-playing .arena-stage {
+  min-height: calc(100vh - 82px);
+  width: 100%;
+  max-width: none;
 }
 
 .page.is-playing .canvas-wrap {
@@ -1090,8 +1100,8 @@ canvas {
 .sidebar {
   display: grid;
   gap: 12px;
-  width: min(1040px, 100%);
-  margin: 0 auto;
+  width: 100%;
+  margin: 0;
 }
 
 .page.is-playing .sidebar {
@@ -1315,7 +1325,7 @@ canvas {
 }
 
 @media (max-width: 1140px) {
-  .arena-grid,
+  .arena-lower,
   .masthead {
     grid-template-columns: 1fr;
     display: grid;
@@ -1331,6 +1341,11 @@ canvas {
 
   .masthead {
     align-items: start;
+  }
+
+  .arena-stage {
+    width: 100%;
+    max-width: none;
   }
 }
 
@@ -1348,7 +1363,8 @@ canvas {
   .mode-grid,
   .masthead__stats,
   .status-grid,
-  .role-brief-grid {
+  .role-brief-grid,
+  .arena-lower {
     grid-template-columns: 1fr;
   }
 

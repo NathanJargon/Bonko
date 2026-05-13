@@ -1023,8 +1023,8 @@ export default function App() {
         )}
 
         {joined && snapshot && (
-          <section className="arena-grid pop-in">
-            <section className="stage panel">
+          <section className="arena-shell pop-in">
+            <section className="stage panel arena-stage">
               <div className="stage__head">
                 <div>
                   <span className="panel__kicker">Room {snapshot.room}</span>
@@ -1058,170 +1058,174 @@ export default function App() {
               </div>
             </section>
 
-            <aside className="sidebar">
-              {overlaysVisible && (
-                <>
-              <section className="panel mini-panel pop-in">
-                <div className="panel__head">
-                  <span className="panel__kicker">Match state</span>
-                  <h3>{snapshot.status === "lobby" ? "Lobby" : snapshot.status === "active" ? "In play" : "Round over"}</h3>
-                </div>
-
-                <div className="status-grid">
-                  <div>
-                    <span>Mode</span>
-                    <strong>{snapshot.modeLabel}</strong>
-                  </div>
-                  <div>
-                    <span>Bots</span>
-                    <strong>{snapshot.botCount}</strong>
-                  </div>
-                  <div>
-                    <span>Notes</span>
-                    <strong>{currentNoteCount}</strong>
-                  </div>
-                  <div>
-                    <span>Players</span>
-                    <strong>{players.length}</strong>
-                  </div>
-                  <div>
-                    <span>Time</span>
-                    <strong>{formatSeconds(remaining)}</strong>
-                  </div>
-                </div>
-              </section>
-
-              {snapshot.status === "lobby" && (
+            <section className="arena-lower">
+              <aside className="sidebar arena-column">
                 <section className="panel mini-panel pop-in">
                   <div className="panel__head">
-                    <span className="panel__kicker">Command deck</span>
-                    <h3>Match settings</h3>
+                    <span className="panel__kicker">Match state</span>
+                    <h3>{snapshot.status === "lobby" ? "Lobby" : snapshot.status === "active" ? "In play" : "Round over"}</h3>
                   </div>
 
-                  <div className="mode-grid compact">
-                    {Object.entries(MODE_PRESETS).map(([mode, preset]) => (
-                      <button
-                        key={mode}
-                        className={`mode-chip ${draftMode === mode ? "selected" : ""}`}
-                        onClick={() => selectMode(mode)}
-                        type="button"
-                        disabled={!canEditLobby}
-                      >
-                        {preset.label}
-                      </button>
+                  <div className="status-grid">
+                    <div>
+                      <span>Mode</span>
+                      <strong>{snapshot.modeLabel}</strong>
+                    </div>
+                    <div>
+                      <span>Bots</span>
+                      <strong>{snapshot.botCount}</strong>
+                    </div>
+                    <div>
+                      <span>Notes</span>
+                      <strong>{currentNoteCount}</strong>
+                    </div>
+                    <div>
+                      <span>Players</span>
+                      <strong>{players.length}</strong>
+                    </div>
+                    <div>
+                      <span>Time</span>
+                      <strong>{formatSeconds(remaining)}</strong>
+                    </div>
+                  </div>
+                </section>
+
+                {snapshot.status === "lobby" && (
+                  <section className="panel mini-panel pop-in">
+                    <div className="panel__head">
+                      <span className="panel__kicker">Command deck</span>
+                      <h3>Match settings</h3>
+                    </div>
+
+                    <div className="mode-grid compact">
+                      {Object.entries(MODE_PRESETS).map(([mode, preset]) => (
+                        <button
+                          key={mode}
+                          className={`mode-chip ${draftMode === mode ? "selected" : ""}`}
+                          onClick={() => selectMode(mode)}
+                          type="button"
+                          disabled={!canEditLobby}
+                        >
+                          {preset.label}
+                        </button>
+                      ))}
+                    </div>
+
+                    <div className="setting-row inline">
+                      <div>
+                        <strong>Bot count</strong>
+                        <p>{draftMode === "classic" ? "Classic disables bots." : "Fine-tune practice pressure."}</p>
+                      </div>
+                      <div className="stepper">
+                        <button type="button" onClick={() => changeBotCount(-1)} disabled={!canEditLobby || draftMode === "classic"}>
+                          -
+                        </button>
+                        <span>{draftMode === "classic" ? 0 : draftBotCount}</span>
+                        <button type="button" onClick={() => changeBotCount(1)} disabled={!canEditLobby || draftMode === "classic"}>
+                          +
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="setting-row inline">
+                      <div>
+                        <strong>Note count</strong>
+                        <p>How many hidden notes are active.</p>
+                      </div>
+                      <div className="stepper">
+                        <button type="button" onClick={() => changeNoteCount(-1)} disabled={!canEditLobby}>
+                          -
+                        </button>
+                        <span>{draftNoteCount}</span>
+                        <button type="button" onClick={() => changeNoteCount(1)} disabled={!canEditLobby}>
+                          +
+                        </button>
+                      </div>
+                    </div>
+
+                    <button onClick={startRound} disabled={!isHost || (draftMode === "classic" && players.length < 3)}>
+                      Start Round
+                    </button>
+                  </section>
+                )}
+
+                {snapshot.status === "ended" && (
+                  <section className="panel mini-panel pop-in">
+                    <div className="panel__head">
+                      <span className="panel__kicker">Result</span>
+                      <h3>{snapshot.winner === "crew" ? "Crew wins" : "Shadow wins"}</h3>
+                    </div>
+                    <p className="muted">{snapshot.reason}</p>
+                    {isHost && <button onClick={resetRound}>Back To Lobby</button>}
+                  </section>
+                )}
+              </aside>
+
+              <aside className="sidebar arena-column">
+                <section className="panel mini-panel pop-in">
+                  <div className="panel__head">
+                    <span className="panel__kicker">Roster</span>
+                    <h3>{players.length} fighters</h3>
+                  </div>
+                  <ul className="roster-list">
+                    {players.map((player) => (
+                      <PlayerRow key={player.id} player={player} isYou={player.id === socket.id} />
                     ))}
-                  </div>
-
-                  <div className="setting-row inline">
-                    <div>
-                      <strong>Bot count</strong>
-                      <p>{draftMode === "classic" ? "Classic disables bots." : "Fine-tune practice pressure."}</p>
-                    </div>
-                    <div className="stepper">
-                      <button type="button" onClick={() => changeBotCount(-1)} disabled={!canEditLobby || draftMode === "classic"}>
-                        -
-                      </button>
-                      <span>{draftMode === "classic" ? 0 : draftBotCount}</span>
-                      <button type="button" onClick={() => changeBotCount(1)} disabled={!canEditLobby || draftMode === "classic"}>
-                        +
-                      </button>
-                    </div>
-                  </div>
-
-                  <div className="setting-row inline">
-                    <div>
-                      <strong>Note count</strong>
-                      <p>How many hidden notes are active.</p>
-                    </div>
-                    <div className="stepper">
-                      <button type="button" onClick={() => changeNoteCount(-1)} disabled={!canEditLobby}>
-                        -
-                      </button>
-                      <span>{draftNoteCount}</span>
-                      <button type="button" onClick={() => changeNoteCount(1)} disabled={!canEditLobby}>
-                        +
-                      </button>
-                    </div>
-                  </div>
-
-                  <button onClick={startRound} disabled={!isHost || (draftMode === "classic" && players.length < 3)}>
-                    Start Round
-                  </button>
+                  </ul>
                 </section>
-              )}
+              </aside>
 
-              {snapshot.status === "ended" && (
-                <section className="panel mini-panel pop-in">
-                  <div className="panel__head">
-                    <span className="panel__kicker">Result</span>
-                    <h3>{snapshot.winner === "crew" ? "Crew wins" : "Shadow wins"}</h3>
-                  </div>
-                  <p className="muted">{snapshot.reason}</p>
-                  {isHost && <button onClick={resetRound}>Back To Lobby</button>}
-                </section>
-              )}
-
-              <section className="panel mini-panel pop-in">
-                <div className="panel__head">
-                  <span className="panel__kicker">Roster</span>
-                  <h3>{players.length} fighters</h3>
-                </div>
-                <ul className="roster-list">
-                  {players.map((player) => (
-                    <PlayerRow key={player.id} player={player} isYou={player.id === socket.id} />
-                  ))}
-                </ul>
-              </section>
-                </>
-              )}
-
-              {snapshot.status === "active" && (
+              <aside className="sidebar arena-column">
                 <section className="panel mini-panel pop-in role-brief-panel">
                   <div className="panel__head">
                     <span className="panel__kicker">Role briefing</span>
-                    <h3>{roleHeading}</h3>
+                    <h3>{snapshot.status === "active" ? roleHeading : "Room tips"}</h3>
                   </div>
 
                   <p className="muted">
-                    {stunRemaining > 0 && !isSpectating ? `Stunned (${stunRemaining}s). ` : ""}
-                    {roleIntro}
+                    {snapshot.status === "active"
+                      ? `${stunRemaining > 0 && !isSpectating ? `Stunned (${stunRemaining}s). ` : ""}${roleIntro}`
+                      : "Start the round to see role guidance and live abilities."}
                   </p>
 
-                  <div className="role-brief-grid">
-                    <div className="role-brief-item">
-                      <span>Objective</span>
-                      <strong>{roleObjective}</strong>
-                    </div>
-                    <div className="role-brief-item">
-                      <span>Skills</span>
-                      <strong>{roleSkills}</strong>
-                    </div>
-                  </div>
-
-                  {isSpectating && (
-                    <button type="button" onClick={cycleSpectateTarget} disabled={spectatablePlayers.length < 2}>
-                      Next Player Camera
-                    </button>
-                  )}
-
-                  {me?.isShadow && !isSpectating && (
-                    <div className="shadow-skill-grid">
-                      <div>
-                        <span>Dash</span>
-                        <strong>{shadowDashReady ? "Ready" : `${Math.max(0, Math.ceil(((me?.shadowDashCooldownUntil ?? 0) - (snapshot?.now ?? Date.now())) / 1000))}s`}</strong>
+                  {snapshot.status === "active" && (
+                    <>
+                      <div className="role-brief-grid">
+                        <div className="role-brief-item">
+                          <span>Objective</span>
+                          <strong>{roleObjective}</strong>
+                        </div>
+                        <div className="role-brief-item">
+                          <span>Skills</span>
+                          <strong>{roleSkills}</strong>
+                        </div>
                       </div>
-                      <div>
-                        <span>Mark</span>
-                        <strong>{shadowMarkReady ? "Ready" : `${Math.max(0, Math.ceil(((me?.shadowMarkCooldownUntil ?? 0) - (snapshot?.now ?? Date.now())) / 1000))}s`}</strong>
-                      </div>
-                    </div>
-                  )}
 
-                  {!isSpectating && me?.isShadow && cooldown > 0 && <p className="muted">Tag cooldown: {cooldown}s</p>}
+                      {isSpectating && (
+                        <button type="button" onClick={cycleSpectateTarget} disabled={spectatablePlayers.length < 2}>
+                          Next Player Camera
+                        </button>
+                      )}
+
+                      {me?.isShadow && !isSpectating && (
+                        <div className="shadow-skill-grid">
+                          <div>
+                            <span>Dash</span>
+                            <strong>{shadowDashReady ? "Ready" : `${Math.max(0, Math.ceil(((me?.shadowDashCooldownUntil ?? 0) - (snapshot?.now ?? Date.now())) / 1000))}s`}</strong>
+                          </div>
+                          <div>
+                            <span>Mark</span>
+                            <strong>{shadowMarkReady ? "Ready" : `${Math.max(0, Math.ceil(((me?.shadowMarkCooldownUntil ?? 0) - (snapshot?.now ?? Date.now())) / 1000))}s`}</strong>
+                          </div>
+                        </div>
+                      )}
+
+                      {!isSpectating && me?.isShadow && cooldown > 0 && <p className="muted">Tag cooldown: {cooldown}s</p>}
+                    </>
+                  )}
                 </section>
-              )}
-
-            </aside>
+              </aside>
+            </section>
           </section>
         )}
 
@@ -1319,9 +1323,6 @@ export default function App() {
               <span>Enter</span>
               <p>Type below and send</p>
             </div>
-            <button type="button" className="control-action" onClick={handleInteract} disabled={!nearestInteractable || snapshot.status === "lobby" || Boolean(nearestNote)}>
-              Use Nearby
-            </button>
           </footer>
         )}
 
