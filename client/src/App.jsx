@@ -1173,9 +1173,6 @@ export default function App() {
                     ))}
                   </ul>
                 </section>
-              </aside>
-
-              <aside className="sidebar arena-column">
                 <section className="panel mini-panel pop-in role-brief-panel">
                   <div className="panel__head">
                     <span className="panel__kicker">Role briefing</span>
@@ -1227,6 +1224,45 @@ export default function App() {
               </aside>
             </section>
           </section>
+        )}
+
+        {joined && snapshot && overlaysVisible && (
+          <footer className="control-bar">
+            <div className="control-chip">
+              <strong>Controls</strong>
+              <span>Move</span>
+              <p>WASD or arrows</p>
+            </div>
+            <div className="control-chip">
+              <strong>Combat</strong>
+              <span>Tag</span>
+              <p>Space as Shadow</p>
+            </div>
+            {me?.isShadow && (
+              <>
+                <div className="control-chip">
+                  <strong>Skill 1</strong>
+                  <span>Q</span>
+                  <p>Mark a nearby crew member</p>
+                </div>
+                <div className="control-chip">
+                  <strong>Skill 2</strong>
+                  <span>Shift</span>
+                  <p>Dash forward to close distance</p>
+                </div>
+              </>
+            )}
+            <div className="control-chip">
+              <strong>Interact</strong>
+              <span>E</span>
+              <p>{nearestInteractable ? nearestInteractable.label : nearestNote ? "Type the hidden note code" : "Move near a pad"}</p>
+            </div>
+            <div className="control-chip accent">
+              <strong>Chat</strong>
+              <span>Enter</span>
+              <p>Type below and send</p>
+            </div>
+          </footer>
         )}
 
         {joined && snapshot && isChatOpen && (
@@ -1285,45 +1321,6 @@ export default function App() {
               <button type="submit">Decode</button>
             </form>
           </section>
-        )}
-
-        {joined && snapshot && overlaysVisible && (
-          <footer className="control-bar">
-            <div className="control-chip">
-              <strong>Controls</strong>
-              <span>Move</span>
-              <p>WASD or arrows</p>
-            </div>
-            <div className="control-chip">
-              <strong>Combat</strong>
-              <span>Tag</span>
-              <p>Space as Shadow</p>
-            </div>
-            {me?.isShadow && (
-              <>
-                <div className="control-chip">
-                  <strong>Skill 1</strong>
-                  <span>Q</span>
-                  <p>Mark a nearby crew member</p>
-                </div>
-                <div className="control-chip">
-                  <strong>Skill 2</strong>
-                  <span>Shift</span>
-                  <p>Dash forward to close distance</p>
-                </div>
-              </>
-            )}
-            <div className="control-chip">
-              <strong>Interact</strong>
-              <span>E</span>
-              <p>{nearestInteractable ? nearestInteractable.label : nearestNote ? "Type the hidden note code" : "Move near a pad"}</p>
-            </div>
-            <div className="control-chip accent">
-              <strong>Chat</strong>
-              <span>Enter</span>
-              <p>Type below and send</p>
-            </div>
-          </footer>
         )}
 
         {joined && snapshot && isPlaying && (
