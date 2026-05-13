@@ -1060,36 +1060,6 @@ export default function App() {
 
             <section className="arena-lower">
               <aside className="sidebar arena-column">
-                <section className="panel mini-panel pop-in">
-                  <div className="panel__head">
-                    <span className="panel__kicker">Match state</span>
-                    <h3>{snapshot.status === "lobby" ? "Lobby" : snapshot.status === "active" ? "In play" : "Round over"}</h3>
-                  </div>
-
-                  <div className="status-grid">
-                    <div>
-                      <span>Mode</span>
-                      <strong>{snapshot.modeLabel}</strong>
-                    </div>
-                    <div>
-                      <span>Bots</span>
-                      <strong>{snapshot.botCount}</strong>
-                    </div>
-                    <div>
-                      <span>Notes</span>
-                      <strong>{currentNoteCount}</strong>
-                    </div>
-                    <div>
-                      <span>Players</span>
-                      <strong>{players.length}</strong>
-                    </div>
-                    <div>
-                      <span>Time</span>
-                      <strong>{formatSeconds(remaining)}</strong>
-                    </div>
-                  </div>
-                </section>
-
                 {snapshot.status === "lobby" && (
                   <section className="panel mini-panel pop-in">
                     <div className="panel__head">
@@ -1159,9 +1129,81 @@ export default function App() {
                     {isHost && <button onClick={resetRound}>Back To Lobby</button>}
                   </section>
                 )}
+
+                <section className="panel mini-panel pop-in">
+                  <div className="panel__head">
+                    <span className="panel__kicker">Gameplay</span>
+                    <h3>Controls & Info</h3>
+                  </div>
+
+                  <div className="control-chip">
+                    <strong>Movement</strong>
+                    <span>WASD / Arrows</span>
+                    <p>Navigate the arena</p>
+                  </div>
+                  <div className="control-chip">
+                    <strong>Combat</strong>
+                    <span>Space</span>
+                    <p>Tag as Shadow</p>
+                  </div>
+                  {me?.isShadow && (
+                    <>
+                      <div className="control-chip">
+                        <strong>Mark</strong>
+                        <span>Q</span>
+                        <p>Mark nearby crew</p>
+                      </div>
+                      <div className="control-chip">
+                        <strong>Dash</strong>
+                        <span>Shift</span>
+                        <p>Close distance</p>
+                      </div>
+                    </>
+                  )}
+                  <div className="control-chip">
+                    <strong>Interact</strong>
+                    <span>E</span>
+                    <p>{nearestInteractable ? nearestInteractable.label : nearestNote ? "Type code" : "Move near pad"}</p>
+                  </div>
+                  <div className="control-chip accent">
+                    <strong>Chat</strong>
+                    <span>Enter</span>
+                    <p>Type message</p>
+                  </div>
+                </section>
               </aside>
 
               <aside className="sidebar arena-column">
+                <section className="panel mini-panel pop-in">
+                  <div className="panel__head">
+                    <span className="panel__kicker">Match state</span>
+                    <h3>{snapshot.status === "lobby" ? "Lobby" : snapshot.status === "active" ? "In play" : "Round over"}</h3>
+                  </div>
+
+                  <div className="status-grid">
+                    <div>
+                      <span>Mode</span>
+                      <strong>{snapshot.modeLabel}</strong>
+                    </div>
+                    <div>
+                      <span>Bots</span>
+                      <strong>{snapshot.botCount}</strong>
+                    </div>
+                    <div>
+                      <span>Notes</span>
+                      <strong>{currentNoteCount}</strong>
+                    </div>
+                    <div>
+                      <span>Players</span>
+                      <strong>{players.length}</strong>
+                    </div>
+                    <div>
+                      <span>Time</span>
+                      <strong>{formatSeconds(remaining)}</strong>
+                    </div>
+                  </div>
+                </section>
+
                 <section className="panel mini-panel pop-in">
                   <div className="panel__head">
                     <span className="panel__kicker">Roster</span>
@@ -1173,97 +1215,12 @@ export default function App() {
                     ))}
                   </ul>
                 </section>
-                <section className="panel mini-panel pop-in role-brief-panel">
-                  <div className="panel__head">
-                    <span className="panel__kicker">Role briefing</span>
-                    <h3>{snapshot.status === "active" ? roleHeading : "Room tips"}</h3>
-                  </div>
-
-                  <p className="muted">
-                    {snapshot.status === "active"
-                      ? `${stunRemaining > 0 && !isSpectating ? `Stunned (${stunRemaining}s). ` : ""}${roleIntro}`
-                      : "Start the round to see role guidance and live abilities."}
-                  </p>
-
-                  {snapshot.status === "active" && (
-                    <>
-                      <div className="role-brief-grid">
-                        <div className="role-brief-item">
-                          <span>Objective</span>
-                          <strong>{roleObjective}</strong>
-                        </div>
-                        <div className="role-brief-item">
-                          <span>Skills</span>
-                          <strong>{roleSkills}</strong>
-                        </div>
-                      </div>
-
-                      {isSpectating && (
-                        <button type="button" onClick={cycleSpectateTarget} disabled={spectatablePlayers.length < 2}>
-                          Next Player Camera
-                        </button>
-                      )}
-
-                      {me?.isShadow && !isSpectating && (
-                        <div className="shadow-skill-grid">
-                          <div>
-                            <span>Dash</span>
-                            <strong>{shadowDashReady ? "Ready" : `${Math.max(0, Math.ceil(((me?.shadowDashCooldownUntil ?? 0) - (snapshot?.now ?? Date.now())) / 1000))}s`}</strong>
-                          </div>
-                          <div>
-                            <span>Mark</span>
-                            <strong>{shadowMarkReady ? "Ready" : `${Math.max(0, Math.ceil(((me?.shadowMarkCooldownUntil ?? 0) - (snapshot?.now ?? Date.now())) / 1000))}s`}</strong>
-                          </div>
-                        </div>
-                      )}
-
-                      {!isSpectating && me?.isShadow && cooldown > 0 && <p className="muted">Tag cooldown: {cooldown}s</p>}
-                    </>
-                  )}
-                </section>
               </aside>
             </section>
           </section>
         )}
 
-        {joined && snapshot && overlaysVisible && (
-          <footer className="control-bar">
-            <div className="control-chip">
-              <strong>Controls</strong>
-              <span>Move</span>
-              <p>WASD or arrows</p>
-            </div>
-            <div className="control-chip">
-              <strong>Combat</strong>
-              <span>Tag</span>
-              <p>Space as Shadow</p>
-            </div>
-            {me?.isShadow && (
-              <>
-                <div className="control-chip">
-                  <strong>Skill 1</strong>
-                  <span>Q</span>
-                  <p>Mark a nearby crew member</p>
-                </div>
-                <div className="control-chip">
-                  <strong>Skill 2</strong>
-                  <span>Shift</span>
-                  <p>Dash forward to close distance</p>
-                </div>
-              </>
-            )}
-            <div className="control-chip">
-              <strong>Interact</strong>
-              <span>E</span>
-              <p>{nearestInteractable ? nearestInteractable.label : nearestNote ? "Type the hidden note code" : "Move near a pad"}</p>
-            </div>
-            <div className="control-chip accent">
-              <strong>Chat</strong>
-              <span>Enter</span>
-              <p>Type below and send</p>
-            </div>
-          </footer>
-        )}
+
 
         {joined && snapshot && isChatOpen && (
           <section className="panel mini-panel pop-in chat-panel chat-panel-fab">
