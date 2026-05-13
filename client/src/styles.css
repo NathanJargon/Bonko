@@ -712,6 +712,34 @@ button.ghost {
   padding: 8px 14px;
   flex: none;
 }
+.lobby-browser__head strong,
+.menu-panel--lobbies .panel__head h3,
+.lobby-row strong {
+  font-family: Bungee, Fredoka, sans-serif;
+  letter-spacing: 0.06em;
+  color: var(--accent);
+  text-transform: none;
+}
+
+.lobby-browser__head strong {
+  font-size: 1.02rem;
+  transform: skewX(-3deg);
+  text-shadow: 0 3px 0 rgba(0,0,0,0.22);
+}
+
+.menu-panel--lobbies .panel__head h3 {
+  font-size: 1.05rem;
+  margin: 0;
+  transform: skewX(-3deg);
+  text-shadow: 0 6px 0 rgba(0,0,0,0.18), 0 12px 24px rgba(0,0,0,0.20);
+}
+
+.lobby-row strong {
+  display: block;
+  font-size: 1.02rem;
+  text-transform: uppercase;
+  color: var(--ink);
+}
 
 .page.theme-light .lobby-browser,
 .page.theme-light .lobby-row {
