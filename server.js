@@ -24,7 +24,7 @@ const SHADOW_DASH_COOLDOWN_MS = 7000;
 const SHADOW_MARK_RANGE = 200;
 const SHADOW_MARK_MS = 3600;
 const SHADOW_MARK_COOLDOWN_MS = 11000;
-const ROOM_RETAIN_MS = 2 * 60 * 1000;
+const ROOM_RETAIN_MS = 10 * 1000;
 const MODE_CONFIGS = {
   classic: {
     label: "Classic",
