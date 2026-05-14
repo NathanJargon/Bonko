@@ -1161,7 +1161,13 @@ export default function App() {
                   <span>{players.length} players</span>
                   <span>{roomScore}/{noteTarget} notes</span>
                   <span>{formatSeconds(remaining)}</span>
-                  {isSpectating && <span>Spectating</span>}
+                  <span>
+                    {isSpectating
+                      ? "Spectating"
+                      : me?.isShadow
+                      ? "Shadow"
+                      : "Crew"}
+                  </span>
                   {isPlaying && (
                     <button type="button" className="overlay-toggle" onClick={() => setShowMenus((visible) => !visible)}>
                       {overlaysVisible ? "Hide Menus" : "Show Menus"}
@@ -1174,7 +1180,13 @@ export default function App() {
               </div>
 
               <div className="canvas-wrap">
-                <canvas ref={canvasRef} width={CANVAS_WIDTH} height={CANVAS_HEIGHT} />
+                <canvas
+                  ref={canvasRef}
+                  width={CANVAS_WIDTH}
+                  height={CANVAS_HEIGHT}
+                  onClick={() => isSpectating && cycleSpectateTarget()}
+                  style={{ cursor: isSpectating ? "pointer" : "default" }}
+                />
                 <div className="canvas-legend">
                   <span>Move: WASD / Arrows</span>
                   <span>Tag: Space</span>
