@@ -783,7 +783,7 @@ button.ghost {
 }
 
 .page.is-playing .canvas-wrap canvas {
-  height: calc(100vh - 248px);
+  height: auto;
 }
 
 .stage {
