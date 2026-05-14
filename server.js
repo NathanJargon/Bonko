@@ -24,6 +24,7 @@ const SHADOW_DASH_COOLDOWN_MS = 7000;
 const SHADOW_MARK_RANGE = 200;
 const SHADOW_MARK_MS = 3600;
 const SHADOW_MARK_COOLDOWN_MS = 11000;
+const ROOM_RETAIN_MS = 2 * 60 * 1000;
 const MODE_CONFIGS = {
   classic: {
     label: "Classic",
@@ -324,7 +325,40 @@ function makeRoom(code) {
     interactables: createInteractables(),
     chat: [],
     reason: "",
+    purgeTimer: null,
+    purgeAt: null,
   };
+}
+
+function cancelRoomPurge(room) {
+  if (room.purgeTimer) {
+    clearTimeout(room.purgeTimer);
+    room.purgeTimer = null;
+  }
+
+  room.purgeAt = null;
+}
+
+function scheduleRoomPurge(room) {
+  cancelRoomPurge(room);
+  room.purgeAt = Date.now() + ROOM_RETAIN_MS;
+  room.purgeTimer = setTimeout(() => {
+    const currentRoom = rooms.get(room.code);
+    if (!currentRoom) {
+      return;
+    }
+
+    if (getHumanPlayers(currentRoom).length > 0) {
+      cancelRoomPurge(currentRoom);
+      return;
+    }
+
+    if (currentRoom.ticker) {
+      clearInterval(currentRoom.ticker);
+    }
+
+    rooms.delete(currentRoom.code);
+  }, ROOM_RETAIN_MS);
 }
 
 function resolveWallCollision(player, walls) {
@@ -853,11 +887,9 @@ function removePlayer(socketId) {
     const wasHost = room.hostId === socketId;
     room.players.delete(socketId);
 
-    if (room.players.size === 0 || getHumanPlayers(room).length === 0) {
-      if (room.ticker) {
-        clearInterval(room.ticker);
-      }
-      rooms.delete(room.code);
+    if (getHumanPlayers(room).length === 0) {
+      room.hostId = null;
+      scheduleRoomPurge(room);
       return;
     }
 
@@ -924,6 +956,7 @@ io.on("connection", (socket) => {
     const code = randomId();
     const room = makeRoom(code);
     rooms.set(code, room);
+    cancelRoomPurge(room);
 
     room.hostId = socket.id;
     const spawn = randomSpawnInBounds(room.walls);
@@ -960,6 +993,8 @@ io.on("connection", (socket) => {
       return;
     }
 
+    cancelRoomPurge(room);
+
     if (room.players.size >= ROOM_SIZE_MAX) {
       socket.emit("error:message", "Room is full.");
       return;
@@ -980,6 +1015,10 @@ io.on("connection", (socket) => {
       speedBoostUntil: 0,
       stunnedUntil: 0,
     });
+
+    if (!room.hostId) {
+      room.hostId = socket.id;
+    }
 
     socket.join(room.code);
     socket.emit("room:joined", { room: room.code, isHost: false });

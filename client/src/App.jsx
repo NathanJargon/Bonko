@@ -8,6 +8,7 @@ const socket = io(SOCKET_URL, {
   transports: ["websocket"],
 });
 
+const ROOM_STORAGE_KEY = "bonko:last-room";
 const CANVAS_WIDTH = 960;
 const CANVAS_HEIGHT = 600;
 const PLAYER_SPEED = 360;
@@ -63,6 +64,85 @@ function randomPilotName() {
 
 function formatSeconds(value) {
   return `${Math.max(0, Math.ceil(value))}s`;
+}
+
+function readRoomCodeFromPath() {
+  if (typeof window === "undefined") {
+    return "";
+  }
+
+  const pathRoomCode = window.location.pathname.replace(/^\/+|\/+$/g, "").toUpperCase();
+  return /^[A-Z0-9]{4,6}$/.test(pathRoomCode) ? pathRoomCode : "";
+}
+
+function syncRoomPath(roomCode) {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  const nextPath = roomCode ? `/${String(roomCode).trim().toUpperCase()}` : "/";
+  window.history.replaceState({}, "", nextPath);
+}
+
+function readPersistedRoom() {
+  if (typeof window === "undefined") {
+    return { roomCode: "", name: "" };
+  }
+
+  try {
+    const raw = window.localStorage.getItem(ROOM_STORAGE_KEY);
+    if (!raw) {
+      return { roomCode: "", name: "" };
+    }
+
+    const parsed = JSON.parse(raw);
+    return {
+      roomCode: String(parsed.roomCode || "").trim().toUpperCase(),
+      name: String(parsed.name || "").trim().slice(0, 16),
+    };
+  } catch {
+    return { roomCode: "", name: "" };
+  }
+}
+
+function savePersistedRoom(roomCode, name) {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  try {
+    window.localStorage.setItem(
+      ROOM_STORAGE_KEY,
+      JSON.stringify({
+        roomCode: String(roomCode || "").trim().toUpperCase(),
+        name: String(name || "").trim().slice(0, 16),
+      }),
+    );
+  } catch {
+    // Ignore storage failures.
+  }
+}
+
+function clearPersistedRoom() {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  try {
+    window.localStorage.removeItem(ROOM_STORAGE_KEY);
+  } catch {
+    // Ignore storage failures.
+  }
+}
+
+function readInitialRoomContext() {
+  const savedRoom = readPersistedRoom();
+  const pathRoomCode = readRoomCodeFromPath();
+
+  return {
+    roomCode: pathRoomCode || savedRoom.roomCode,
+    name: savedRoom.name,
+  };
 }
 
 function applyModeDefaults(mode) {
@@ -151,8 +231,9 @@ function PlayerRow({ player, isYou }) {
 }
 
 export default function App() {
-  const [name, setName] = useState(randomPilotName);
-  const [roomInput, setRoomInput] = useState("");
+  const initialRoomContext = readInitialRoomContext();
+  const [name, setName] = useState(() => initialRoomContext.name || randomPilotName());
+  const [roomInput, setRoomInput] = useState(() => initialRoomContext.roomCode);
   const [availableLobbies, setAvailableLobbies] = useState([]);
   const [isRefreshingLobbies, setIsRefreshingLobbies] = useState(false);
   const [menuError, setMenuError] = useState("");
@@ -176,6 +257,12 @@ export default function App() {
   const renderPlayersRef = useRef(new Map());
   const predictedSelfRef = useRef({ x: 0, y: 0, initialized: false, lastFrameAt: 0 });
   const lastSeenChatIdRef = useRef(null);
+  const nameRef = useRef(name);
+  const resumeAttemptedRef = useRef(false);
+
+  useEffect(() => {
+    nameRef.current = name;
+  }, [name]);
 
   const me = useMemo(() => {
     if (!snapshot) {
@@ -282,6 +369,8 @@ export default function App() {
       setRoomCode(room);
       setRoomInput(room);
       setMenuError("");
+      savePersistedRoom(room, nameRef.current);
+      syncRoomPath(room);
     };
 
     const onUpdate = (nextSnapshot) => {
@@ -289,7 +378,13 @@ export default function App() {
     };
 
     const onError = (message) => {
-      setMenuError(String(message || "Unknown error"));
+      const errorMessage = String(message || "Unknown error");
+      setMenuError(errorMessage);
+
+      if (resumeAttemptedRef.current && errorMessage === "Room not found.") {
+        clearPersistedRoom();
+        resumeAttemptedRef.current = false;
+      }
     };
 
     const onLobbyList = ({ lobbies }) => {
@@ -309,6 +404,35 @@ export default function App() {
       socket.off("room:list", onLobbyList);
     };
   }, []);
+
+  useEffect(() => {
+    const savedRoom = readPersistedRoom();
+    const pathRoomCode = readRoomCodeFromPath();
+    const resumeRoomCode = pathRoomCode || savedRoom.roomCode;
+    const resumeName = savedRoom.name || nameRef.current.trim();
+
+    if (!resumeRoomCode || !resumeName || joined) {
+      return;
+    }
+
+    setName(resumeName);
+    setRoomInput(resumeRoomCode);
+    resumeAttemptedRef.current = true;
+
+    const resume = () => {
+      socket.emit("room:join", { code: resumeRoomCode, name: resumeName });
+    };
+
+    if (socket.connected) {
+      resume();
+      return undefined;
+    }
+
+    socket.once("connect", resume);
+    return () => {
+      socket.off("connect", resume);
+    };
+  }, [joined]);
 
   useEffect(() => {
     const keyDown = (event) => {
@@ -767,6 +891,9 @@ export default function App() {
       socket.emit("room:leave");
     }
 
+    clearPersistedRoom();
+    syncRoomPath("");
+
     setJoined(false);
     setRoomCode("");
     setSnapshot(null);
@@ -1058,7 +1185,8 @@ export default function App() {
               </div>
             </section>
 
-            <section className="arena-lower">
+            {overlaysVisible && (
+              <section className="arena-lower">
               <aside className="sidebar arena-column">
                 {snapshot.status === "lobby" && (
                   <section className="panel mini-panel pop-in">
@@ -1216,7 +1344,8 @@ export default function App() {
                   </ul>
                 </section>
               </aside>
-            </section>
+              </section>
+            )}
           </section>
         )}
 
