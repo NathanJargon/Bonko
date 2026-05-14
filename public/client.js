@@ -192,7 +192,7 @@ function sendMove() {
   socket.emit("player:move", { roomCode: state.roomCode, vx, vy });
 }
 
-setInterval(sendMove, 45);
+setInterval(sendMove, 33);
 
 function connectRoom(createNew) {
   const name = nameInput.value.trim();
