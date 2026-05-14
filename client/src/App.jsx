@@ -8,8 +8,8 @@ const socket = io(SOCKET_URL, {
   transports: ["websocket"],
 });
 
-const CANVAS_WIDTH = 1120;
-const CANVAS_HEIGHT = 708;
+const CANVAS_WIDTH = 960;
+const CANVAS_HEIGHT = 600;
 const PLAYER_SPEED = 360;
 const MODE_PACE = {
   classic: 1,

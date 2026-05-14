@@ -773,7 +773,7 @@ button.ghost {
 
 .page.is-playing .arena-stage {
   min-height: calc(100vh - 82px);
-  width: 100%;
+  width: min(960px, 100%);
   max-width: none;
 }
 
